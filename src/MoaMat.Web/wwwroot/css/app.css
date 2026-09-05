@@ -967,3 +967,124 @@ code {
     .loading-progress-text:after {
         content: var(--blazor-load-percentage-text, "Chargement");
     }
+
+/* ---------------------------------------------------------------------------
+   Écrans d'authentification (connexion, mot de passe oublié, réinitialisation)
+   Utilisés sous AuthLayout ; la mise en page de la carte vit dans
+   Layout/AuthLayout.razor.css.
+   ------------------------------------------------------------------------- */
+.auth-title {
+    margin-bottom: 4px;
+    font-size: 17px;
+}
+
+.auth-lead {
+    margin-bottom: 18px;
+    font-size: 12.5px;
+    color: var(--ink-2);
+}
+
+.auth-hint {
+    padding: 40px 16px;
+    text-align: center;
+    font-size: 13px;
+    color: var(--ink-3);
+}
+
+.auth-field {
+    margin-bottom: 14px;
+}
+
+.auth-field label {
+    display: block;
+    margin-bottom: 5px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--ink-2);
+}
+
+.auth-field input {
+    width: 100%;
+    padding: 9px 11px;
+    font-family: inherit;
+    font-size: 13px;
+    color: var(--ink);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    outline: none;
+}
+
+.auth-field input:focus {
+    border-color: var(--teal);
+    box-shadow: 0 0 0 3px var(--teal-light);
+}
+
+.auth-actions {
+    margin-top: 18px;
+}
+
+.auth-btn {
+    width: 100%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #fff;
+    background: var(--ink);
+    border: 1px solid var(--ink);
+    border-radius: 8px;
+}
+
+.auth-btn:hover:not(:disabled) {
+    background: #0B222E;
+}
+
+.auth-btn:disabled {
+    opacity: .6;
+    cursor: progress;
+}
+
+.auth-links {
+    margin-top: 16px;
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 12px;
+}
+
+.auth-msg {
+    margin-bottom: 16px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: 12.5px;
+    line-height: 1.45;
+}
+
+.auth-msg.error {
+    background: var(--red-bg);
+    border: 1px solid #F2C9C3;
+    color: #7A2820;
+}
+
+.auth-msg.success {
+    background: var(--green-bg);
+    border: 1px solid #C3E2D0;
+    color: #1F5E40;
+}
+
+.auth-spinner {
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(255, 255, 255, .45);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: auth-spin .7s linear infinite;
+}
+
+@keyframes auth-spin {
+    to { transform: rotate(360deg); }
+}

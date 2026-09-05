@@ -1,0 +1,16 @@
+@page "/deconnexion"
+@layout Layout.AuthLayout
+@inject AuthService Auth
+@inject NavigationManager Navigation
+
+<PageTitle>Déconnexion — MoaMat</PageTitle>
+
+<p class="auth-hint">Déconnexion en cours…</p>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        await Auth.SignOutAsync();
+        Navigation.NavigateTo("connexion", replace: true);
+    }
+}
