@@ -34,15 +34,22 @@ jobs:
       - name: Install wasm-tools workload
         run: dotnet workload install wasm-tools
 
+      # Doit se faire AVANT la publication : « dotnet publish » calcule les
+      # empreintes SRI de service-worker-assets.js sur le contenu final. Modifier
+      # index.html après coup casse la vérification d'intégrité du service worker.
+      - name: Set <base href> for project page
+        run: |
+          repo="${GITHUB_REPOSITORY#*/}"
+          index="src/MoaMat.Web/wwwroot/index.html"
+          grep -q '<base href=' "$index" || { echo "::error::balise <base> introuvable dans $index"; exit 1; }
+          sed -i -E "s#<base href=\"[^\"]*\"#<base href=\"/${repo}/\"#" "$index"
+          grep -o '<base href="[^"]*"' "$index"
+
       - name: Publish (Release)
         run: dotnet publish src/MoaMat.Web/MoaMat.Web.csproj -c Release -o dist --nologo
 
-      - name: Rewrite <base href> for project page
-        run: |
-          repo="${GITHUB_REPOSITORY#*/}"
-          sed -i "s|<base href=\"[^\"]*\" />|<base href=\"/${repo}/\" />|" dist/wwwroot/index.html
-          grep -o '<base href="[^"]*" />' dist/wwwroot/index.html
-
+      # index.html n'est pas modifié ici : 404.html et .nojekyll ne sont pas
+      # soumis au contrôle d'intégrité du service worker.
       - name: SPA deep-link fallback + disable Jekyll
         run: |
           cp dist/wwwroot/index.html dist/wwwroot/404.html
