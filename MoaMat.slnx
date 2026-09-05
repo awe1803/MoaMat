@@ -1,0 +1,5 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/MoaMat.Web/MoaMat.Web.csproj" />
+  </Folder>
+</Solution>
