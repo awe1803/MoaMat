@@ -24,16 +24,51 @@ Analyse/                Analyse fonctionnelle et plan de reprise
 ## Démarrage — application
 
 ```bash
+cp src/MoaMat.Web/wwwroot/appsettings.sample.json src/MoaMat.Web/wwwroot/appsettings.json
+# éditer appsettings.json : renseigner Supabase:Url et Supabase:AnonKey
 dotnet restore MoaMat.slnx
 dotnet build   MoaMat.slnx
 dotnet run --project src/MoaMat.Web
 ```
 
-La configuration Supabase est dans
-[`src/MoaMat.Web/wwwroot/appsettings.json`](src/MoaMat.Web/wwwroot/appsettings.json)
-(`Supabase:Url` + `Supabase:AnonKey`). La clé est une clé *publishable* (anon),
+### Configuration Supabase
+
+`Supabase:Url` + `Supabase:AnonKey` (clé *publishable* / anon). Cette clé est
 publique par nature dans une app WebAssembly : le contrôle d'accès réel repose sur
 les policies **RLS** définies dans `db/schema.sql`.
+
+- **En local** : `src/MoaMat.Web/wwwroot/appsettings.json`, copié depuis
+  [`appsettings.sample.json`](src/MoaMat.Web/wwwroot/appsettings.sample.json). Ce
+  fichier **n'est pas versionné** (`.gitignore`).
+- **En CI** : le workflow de déploiement génère `appsettings.json` à partir des
+  **Variables de dépôt** `SUPABASE_URL` et `SUPABASE_ANON_KEY`
+  (*Settings → Secrets and variables → Actions → Variables*). Le workflow
+  keepalive lit les mêmes Variables. Rien n'est commité en clair.
+
+## Déploiement
+
+Cible : **GitHub Pages**, site de projet — `https://<org>.github.io/<dépôt>/`.
+Application 100 % statique (Blazor WASM standalone), servie sans runtime ASP.NET
+Core.
+
+Workflow [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) :
+
+- déclenché à chaque push sur `main` (et manuellement via *workflow_dispatch*) ;
+- `dotnet publish -c Release` → l'artefact `dist/wwwroot` est publié via
+  `actions/upload-pages-artifact` + `actions/deploy-pages` (pas de branche
+  `gh-pages`) ;
+- le `<base href>` est réécrit **avant** `publish` en `/<PAGES_BASE_PATH>/`
+  (sinon les empreintes SRI du service worker sont invalidées).
+  `PAGES_BASE_PATH` vaut le nom du dépôt par défaut, surchargeable par une
+  Variable de dépôt du même nom ;
+- une étape *smoke test* sert `dist/wwwroot` avec `python3 -m http.server` (aucune
+  dépendance .NET) et vérifie que l'app se charge sous le sous-chemin ;
+- **build cassé = déploiement bloqué** : le job `deploy` a `needs: build` ; si une
+  étape de `build` échoue (Variable manquante, compilation, smoke test…),
+  l'artefact n'est pas produit et le site en ligne reste inchangé.
+
+Prérequis côté dépôt : *Settings → Pages → Source = GitHub Actions*, et les
+Variables `SUPABASE_URL` / `SUPABASE_ANON_KEY` définies.
 
 ## Démarrage — base de données
 
@@ -76,3 +111,19 @@ en clair de `utilisateur` ne sont volontairement pas repris.
 `*_sortie_inventaire`, suppression des colonnes calculées, typage fin des mesures
 type « 12 Li » / « 14,3 », activation des clés étrangères) est un chantier distinct :
 les contraintes FK sont pré-écrites mais commentées en fin de `schema.sql`.
+
+## Architecture cible
+
+Découpage visé, **non encore implémenté** :
+
+| Couche | Rôle | Contenu prévu |
+|--------|------|---------------|
+| Domaine | modèles métier | classes POCO mappées sur les tables de `db/schema.sql` (attributs `[Table]` / `BaseModel` de `supabase-csharp`) |
+| Services | accès données | interfaces + implémentations encapsulant le `Supabase.Client` (une par agrégat : bouteilles, détendeurs, prêts…), injectées dans l'UI |
+| UI | présentation | composants Razor, aucun appel Supabase direct |
+
+État actuel : le `Supabase.Client` est enregistré en DI dans
+[`Program.cs`](src/MoaMat.Web/Program.cs) mais n'est ni encapsulé ni consommé ;
+aucun modèle n'existe ; l'UI est encore le gabarit Blazor par défaut
+(Home / Counter / Weather). Cette mise en couches est liée à la normalisation
+métier décrite ci-dessus et sera traitée séparément.

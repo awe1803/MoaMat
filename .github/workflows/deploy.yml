@@ -19,6 +19,12 @@ concurrency:
   group: pages
   cancel-in-progress: false
 
+env:
+  # Sous-chemin GitHub Pages (site de projet : https://<org>.github.io/<PAGES_BASE_PATH>/).
+  # Par défaut le nom du dépôt ; surchargeable via une Variable de dépôt PAGES_BASE_PATH
+  # (ex. domaine personnalisé => la définir vide n'est pas supporté ici, garder un segment).
+  PAGES_BASE_PATH: ${{ vars.PAGES_BASE_PATH || github.event.repository.name }}
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -34,19 +40,53 @@ jobs:
       - name: Install wasm-tools workload
         run: dotnet workload install wasm-tools
 
+      # La configuration Supabase n'est pas versionnée : on la génère à partir des
+      # Variables de dépôt. Étape en échec (Variable absente) => build en échec =>
+      # déploiement bloqué, le site publié reste intact.
+      - name: Write appsettings.json from Actions variables
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+        run: |
+          test -n "$SUPABASE_URL"      || { echo "::error::Variable de dépôt SUPABASE_URL absente"; exit 1; }
+          test -n "$SUPABASE_ANON_KEY" || { echo "::error::Variable de dépôt SUPABASE_ANON_KEY absente"; exit 1; }
+          jq -n --arg u "$SUPABASE_URL" --arg k "$SUPABASE_ANON_KEY" \
+            '{Supabase:{Url:$u,AnonKey:$k}}' > src/MoaMat.Web/wwwroot/appsettings.json
+          echo "appsettings.json généré (Url=$SUPABASE_URL)."
+
       # Doit se faire AVANT la publication : « dotnet publish » calcule les
       # empreintes SRI de service-worker-assets.js sur le contenu final. Modifier
       # index.html après coup casse la vérification d'intégrité du service worker.
       - name: Set <base href> for project page
         run: |
-          repo="${GITHUB_REPOSITORY#*/}"
           index="src/MoaMat.Web/wwwroot/index.html"
+          test -n "$PAGES_BASE_PATH" || { echo "::error::PAGES_BASE_PATH vide"; exit 1; }
           grep -q '<base href=' "$index" || { echo "::error::balise <base> introuvable dans $index"; exit 1; }
-          sed -i -E "s#<base href=\"[^\"]*\"#<base href=\"/${repo}/\"#" "$index"
+          sed -i -E "s#<base href=\"[^\"]*\"#<base href=\"/${PAGES_BASE_PATH}/\"#" "$index"
           grep -o '<base href="[^"]*"' "$index"
 
       - name: Publish (Release)
         run: dotnet publish src/MoaMat.Web/MoaMat.Web.csproj -c Release -o dist --nologo
+
+      # Prouve que la sortie tourne sur un simple serveur de fichiers statiques,
+      # sans aucune dépendance ASP.NET Core à l'exécution. Échec => build en échec.
+      - name: Smoke test on a plain static server (no ASP.NET Core)
+        run: |
+          mkdir -p _static_check/"$PAGES_BASE_PATH"
+          cp -r dist/wwwroot/. _static_check/"$PAGES_BASE_PATH"/
+          python3 -m http.server 8080 --directory _static_check >/dev/null 2>&1 &
+          echo $! > /tmp/srv.pid
+          for i in $(seq 1 20); do curl -fsS -o /dev/null "http://localhost:8080/$PAGES_BASE_PATH/" && break || sleep 0.5; done
+          curl -fsS "http://localhost:8080/$PAGES_BASE_PATH/" -o /tmp/idx.html
+          grep -q 'id="app"' /tmp/idx.html
+          js="$(grep -oE '_framework/blazor\.webassembly\.[A-Za-z0-9]+\.js' /tmp/idx.html | head -1)"
+          test -n "$js" || { echo "::error::script blazor.webassembly introuvable dans index.html"; exit 1; }
+          curl -fsS "http://localhost:8080/$PAGES_BASE_PATH/$js" -o /dev/null
+          curl -fsS "http://localhost:8080/$PAGES_BASE_PATH/appsettings.json" -o /dev/null
+          curl -fsS "http://localhost:8080/$PAGES_BASE_PATH/_framework/blazor.boot.json" -o /dev/null \
+            || echo "(blazor.boot.json non exposé sur cette version du SDK — ignoré)"
+          kill "$(cat /tmp/srv.pid)" 2>/dev/null || true
+          echo "OK — servie par un serveur de fichiers statique pur."
 
       # index.html n'est pas modifié ici : 404.html et .nojekyll ne sont pas
       # soumis au contrôle d'intégrité du service worker.

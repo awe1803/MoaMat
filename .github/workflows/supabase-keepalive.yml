@@ -8,33 +8,29 @@ on:
     - cron: '23 4 */3 * *'
   workflow_dispatch:
 
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - name: Query Supabase REST
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
         run: |
           set -euo pipefail
-          cfg="src/MoaMat.Web/wwwroot/appsettings.json"
-          url="$(jq -r '.Supabase.Url' "$cfg")"
-          key="$(jq -r '.Supabase.AnonKey' "$cfg")"
 
-          if [ -z "$url" ] || [ "$url" = "null" ] || [ -z "$key" ] || [ "$key" = "null" ]; then
-            echo "::error::URL ou clé Supabase introuvable dans $cfg"
+          if [ -z "${SUPABASE_URL}" ] || [ -z "${SUPABASE_ANON_KEY}" ]; then
+            echo "::error::Variables de dépôt SUPABASE_URL / SUPABASE_ANON_KEY absentes"
             exit 1
           fi
 
           # Requête réelle sur une table de référence (compte comme activité côté Supabase).
           code="$(curl -sS -o /tmp/body.txt -w '%{http_code}' \
-            -H "apikey: ${key}" \
-            -H "Authorization: Bearer ${key}" \
-            "${url}/rest/v1/ref_site?select=id&limit=1")"
+            -H "apikey: ${SUPABASE_ANON_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" \
+            "${SUPABASE_URL}/rest/v1/ref_site?select=id&limit=1")"
 
           echo "HTTP ${code}"
           head -c 500 /tmp/body.txt || true
