@@ -484,6 +484,9 @@ $RECYCLE.BIN/
 # MoaMat
 src/**/wwwroot/appsettings*.Development.json
 
+# Sortie de publication (CI)
+/dist/
+
 # MoaMat - donnees et analyses non versionnees
 db/initial_load.sql
 Access_Data/

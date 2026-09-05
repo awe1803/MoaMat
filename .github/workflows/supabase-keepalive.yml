@@ -1,0 +1,51 @@
+name: Supabase keepalive
+
+# Les projets Supabase gratuits sont mis en pause après 7 jours sans activité.
+# On lance une vraie requête sur la base tous les 3 jours pour garder le projet actif.
+
+on:
+  schedule:
+    - cron: '23 4 */3 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Query Supabase REST
+        run: |
+          set -euo pipefail
+          cfg="src/MoaMat.Web/wwwroot/appsettings.json"
+          url="$(jq -r '.Supabase.Url' "$cfg")"
+          key="$(jq -r '.Supabase.AnonKey' "$cfg")"
+
+          if [ -z "$url" ] || [ "$url" = "null" ] || [ -z "$key" ] || [ "$key" = "null" ]; then
+            echo "::error::URL ou clé Supabase introuvable dans $cfg"
+            exit 1
+          fi
+
+          # Requête réelle sur une table de référence (compte comme activité côté Supabase).
+          code="$(curl -sS -o /tmp/body.txt -w '%{http_code}' \
+            -H "apikey: ${key}" \
+            -H "Authorization: Bearer ${key}" \
+            "${url}/rest/v1/ref_site?select=id&limit=1")"
+
+          echo "HTTP ${code}"
+          head -c 500 /tmp/body.txt || true
+          echo
+
+          case "$code" in
+            2*|401|403|404|406)
+              echo "Supabase a répondu (${code}) — projet actif."
+              ;;
+            *)
+              echo "::error::Réponse inattendue de Supabase: ${code}"
+              exit 1
+              ;;
+          esac
