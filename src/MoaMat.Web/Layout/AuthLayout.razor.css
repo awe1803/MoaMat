@@ -1,0 +1,43 @@
+﻿.auth-shell {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 16px;
+    background: var(--bg);
+}
+
+.auth-card {
+    width: 100%;
+    max-width: 380px;
+    padding: 28px 26px 26px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
+}
+
+.auth-brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 22px;
+}
+
+.auth-logo {
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+    object-fit: contain;
+}
+
+.auth-brand-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--ink);
+}
+
+.auth-brand-sub {
+    font-size: 11.5px;
+    color: var(--ink-3);
+}

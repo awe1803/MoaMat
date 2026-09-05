@@ -14,7 +14,9 @@ Gestion de l'inventaire du matériel de plongée de l'ASBL Royal Moana.
 
 ```
 src/MoaMat.Web/         Application Blazor WASM PWA
+src/MoaMat.Web/Auth/    Authentification Supabase (session persistée, rôles)
 db/schema.sql           Schéma PostgreSQL (28 tables + RLS)
+db/storage.sql          Buckets Supabase Storage + policies d'accès par rôle
 db/initial_load.sql     Reprise des données Access (généré)
 tools/Generate-InitialLoad.ps1   Régénère db/initial_load.sql depuis Access_Data/csv/
 Access_Data/            Export CSV de l'ancienne base Access + doc de nommage
@@ -44,6 +46,36 @@ les policies **RLS** définies dans `db/schema.sql`.
   **Variables de dépôt** `SUPABASE_URL` et `SUPABASE_ANON_KEY`
   (*Settings → Secrets and variables → Actions → Variables*). Le workflow
   keepalive lit les mêmes Variables. Rien n'est commité en clair.
+
+**Seule la clé anon voyage côté client.** La clé `service_role` (et toute clé
+`sb_secret_…`) ne doit jamais figurer dans le code, `appsettings*.json`, les
+Variables/Secrets lus par `deploy.yml`, ni les assets publiés. Deux garde-fous :
+
+- au démarrage, `Program.cs` décode la clé configurée et journalise une **erreur**
+  si son rôle JWT n'est pas `anon` (ou si c'est une clé `sb_secret_…`) ;
+- l'étape *« Assert only the anon key ships to the client »* de `deploy.yml`
+  échoue (donc bloque le déploiement) si `service_role` / `sb_secret_` apparaît
+  dans `dist/wwwroot`, ou si la clé embarquée n'est pas une clé publique.
+
+### Authentification & rôles
+
+- Connexion / déconnexion et réinitialisation de mot de passe : Supabase Auth
+  (Gotrue), via [`src/MoaMat.Web/Auth/`](src/MoaMat.Web/Auth/). Pages
+  `/connexion`, `/mot-de-passe-oublie`, `/reinitialiser-mot-de-passe`,
+  `/deconnexion`. Toutes les autres routes exigent une session (`[Authorize]`).
+- **Session persistée** dans le `localStorage` du navigateur
+  (`BrowserSessionPersistence`) : l'utilisateur reste connecté d'un rechargement
+  ou d'une réouverture de la PWA à l'autre ; le jeton est rafraîchi
+  automatiquement (`AutoRefreshToken`).
+- **Rôle applicatif** porté par le claim JWT `app_metadata.role`
+  (`lecture` < `gestion` < `admin` < `super-admin`). `app_metadata` n'est
+  modifiable que côté serveur (dashboard Supabase → *Authentication → Users →
+  App Metadata*, ou Admin API avec la clé `service_role`) : un utilisateur ne
+  peut pas s'auto-promouvoir depuis le client. Politiques d'autorisation Blazor
+  `role:lecture+` … `role:super-admin` (voir `MoaMatRoles`).
+- **Configuration Supabase requise** : *Authentication → URL Configuration* →
+  ajouter `<origine>/reinitialiser-mot-de-passe` aux *Redirect URLs* (local **et**
+  URL GitHub Pages) pour que le lien de récupération revienne dans l'app.
 
 ## Déploiement
 
@@ -79,6 +111,10 @@ Dans l'éditeur SQL Supabase (ou via `psql`), exécuter **dans l'ordre** :
 2. [`db/initial_load.sql`](db/initial_load.sql) — charge les données reprises de
    l'ancienne base Access. Ré-exécutable (commence par
    `truncate ... restart identity cascade`).
+3. [`db/storage.sql`](db/storage.sql) — crée les buckets Supabase Storage
+   (`materiel-photos`, `certificats-requalification`, `factures`, tous privés),
+   les fonctions de rôle `public.moamat_role()` / `public.moamat_role_rank()` et
+   les policies d'accès par rôle sur `storage.objects`. Ré-exécutable.
 
 Contrôle rapide des volumes après chargement :
 
@@ -123,7 +159,10 @@ Découpage visé, **non encore implémenté** :
 | UI | présentation | composants Razor, aucun appel Supabase direct |
 
 État actuel : le `Supabase.Client` est enregistré en DI dans
-[`Program.cs`](src/MoaMat.Web/Program.cs) mais n'est ni encapsulé ni consommé ;
-aucun modèle n'existe ; l'UI est encore le gabarit Blazor par défaut
-(Home / Counter / Weather). Cette mise en couches est liée à la normalisation
-métier décrite ci-dessus et sera traitée séparément.
+[`Program.cs`](src/MoaMat.Web/Program.cs). La couche **authentification** est en
+place (`src/MoaMat.Web/Auth/` : session persistée, `AuthenticationStateProvider`,
+`AuthService`, pages de connexion / réinitialisation, garde de routes, rôles). Le
+reste — modèles POCO, services d'accès aux données par agrégat, UI métier — n'est
+pas encore implémenté (l'UI hors auth est encore le gabarit Home / Counter /
+Weather). Cette mise en couches est liée à la normalisation métier décrite
+ci-dessus et sera traitée séparément.

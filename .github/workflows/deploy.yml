@@ -68,6 +68,41 @@ jobs:
       - name: Publish (Release)
         run: dotnet publish src/MoaMat.Web/MoaMat.Web.csproj -c Release -o dist --nologo
 
+      # Garde-fou de sécurité : aucun secret Supabase ne doit se retrouver dans les
+      # assets publiés. Seule une clé publique (anon / publishable) est admise.
+      # Échec ici => build en échec => déploiement bloqué.
+      - name: Assert only the anon key ships to the client
+        run: |
+          root="dist/wwwroot"
+
+          # 1. Rien qui ressemble à une clé de service dans TOUTE la sortie publiée.
+          if grep -rIl -e 'service_role' -e 'sb_secret_' -e 'SUPABASE_SERVICE' "$root"; then
+            echo "::error::Référence à une clé de service trouvée dans $root"; exit 1
+          fi
+
+          # 2. La config ne contient que Url + AnonKey (pas de ServiceKey/ServiceRoleKey…).
+          test -f "$root/appsettings.json" || { echo "::error::appsettings.json absent de la sortie"; exit 1; }
+          extra="$(jq -r '.Supabase | keys[]' "$root/appsettings.json" | grep -viE '^(Url|AnonKey)$' || true)"
+          test -z "$extra" || { echo "::error::Clés inattendues dans Supabase: $extra"; exit 1; }
+
+          # 3. La clé embarquée doit être publique : soit sb_publishable_..., soit un
+          #    JWT dont le claim "role" vaut "anon".
+          key="$(jq -r '.Supabase.AnonKey' "$root/appsettings.json")"
+          case "$key" in
+            sb_publishable_*)
+              echo "Clé publishable — OK." ;;
+            eyJ*.*.*)
+              payload="${key#*.}"; payload="${payload%.*}"
+              pad=$(( (4 - ${#payload} % 4) % 4 ))
+              payload="${payload}$(printf '=%.0s' $(seq 1 $pad))"
+              role="$(printf '%s' "$payload" | tr '_-' '/+' | base64 -d 2>/dev/null | jq -r '.role // empty')"
+              echo "JWT role = ${role:-<absent>}"
+              test "$role" = "anon" || { echo "::error::La clé Supabase embarquée a le rôle '$role' (attendu: anon)"; exit 1; }
+              echo "Clé anon (JWT) — OK." ;;
+            *)
+              echo "::error::Format de clé Supabase non reconnu (ni sb_publishable_, ni JWT)"; exit 1 ;;
+          esac
+
       # Prouve que la sortie tourne sur un simple serveur de fichiers statiques,
       # sans aucune dépendance ASP.NET Core à l'exécution. Échec => build en échec.
       - name: Smoke test on a plain static server (no ASP.NET Core)

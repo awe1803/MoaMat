@@ -1,0 +1,104 @@
+@page "/connexion"
+@layout Layout.AuthLayout
+@inject AuthService Auth
+@inject NavigationManager Navigation
+@inject AuthenticationStateProvider AuthState
+
+<PageTitle>Connexion — MoaMat</PageTitle>
+
+<h1 class="auth-title">Connexion</h1>
+<p class="auth-lead">Accédez à la gestion du matériel Royal Moana.</p>
+
+@if (_error is not null)
+{
+    <div class="auth-msg error" role="alert">@_error</div>
+}
+
+<EditForm Model="_model" OnValidSubmit="SubmitAsync">
+    <DataAnnotationsValidator />
+
+    <div class="auth-field">
+        <label for="email">Adresse e-mail</label>
+        <InputText id="email" @bind-Value="_model.Email" type="email" autocomplete="username"
+                   autofocus disabled="@_busy" />
+        <ValidationMessage For="() => _model.Email" />
+    </div>
+
+    <div class="auth-field">
+        <label for="password">Mot de passe</label>
+        <InputText id="password" @bind-Value="_model.Password" type="password"
+                   autocomplete="current-password" disabled="@_busy" />
+        <ValidationMessage For="() => _model.Password" />
+    </div>
+
+    <div class="auth-actions">
+        <button type="submit" class="auth-btn" disabled="@_busy">
+            @if (_busy)
+            {
+                <span class="auth-spinner" aria-hidden="true"></span>
+                <span>Connexion…</span>
+            }
+            else
+            {
+                <span>Se connecter</span>
+            }
+        </button>
+    </div>
+</EditForm>
+
+<div class="auth-links">
+    <a href="mot-de-passe-oublie">Mot de passe oublié ?</a>
+</div>
+
+@code {
+    private readonly Credentials _model = new();
+    private bool _busy;
+    private string? _error;
+
+    [SupplyParameterFromQuery(Name = "returnUrl")]
+    public string? ReturnUrl { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Déjà connecté (session restaurée) : on saute l'écran.
+        var state = await AuthState.GetAuthenticationStateAsync();
+        if (state.User.Identity?.IsAuthenticated == true)
+        {
+            Navigation.NavigateTo(SafeReturnUrl(), replace: true);
+        }
+    }
+
+    private async Task SubmitAsync()
+    {
+        _busy = true;
+        _error = null;
+
+        var result = await Auth.SignInAsync(_model.Email, _model.Password);
+
+        _busy = false;
+
+        if (result.Succeeded)
+        {
+            Navigation.NavigateTo(SafeReturnUrl(), replace: true);
+        }
+        else
+        {
+            _error = result.Error;
+        }
+    }
+
+    private string SafeReturnUrl()
+        => string.IsNullOrWhiteSpace(ReturnUrl) || ReturnUrl.Contains("://") || ReturnUrl.StartsWith("//")
+            ? ""
+            : ReturnUrl;
+
+    private sealed class Credentials
+    {
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "E-mail requis.")]
+        [System.ComponentModel.DataAnnotations.EmailAddress(ErrorMessage = "E-mail invalide.")]
+        public string Email { get; set; } = "";
+
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Mot de passe requis.")]
+        public string Password { get; set; } = "";
+    }
+}

@@ -25,6 +25,16 @@
             </NavLink>
         </div>
     </nav>
+
+    <AuthorizeView>
+        <div class="nav-user">
+            <div class="nav-user-id">
+                <span class="nav-user-avatar">@Initials(context.User.Identity?.Name)</span>
+                <span class="nav-user-email" title="@context.User.Identity?.Name">@context.User.Identity?.Name</span>
+            </div>
+            <a class="nav-user-signout" href="deconnexion">Se déconnecter</a>
+        </div>
+    </AuthorizeView>
 </div>
 
 @code {
@@ -35,5 +45,19 @@
     private void ToggleNavMenu()
     {
         collapseNavMenu = !collapseNavMenu;
+    }
+
+    private static string Initials(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return "?";
+        }
+
+        var local = name.Split('@')[0];
+        var parts = local.Split(new[] { '.', '-', '_' }, StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length >= 2
+            ? $"{char.ToUpperInvariant(parts[0][0])}{char.ToUpperInvariant(parts[1][0])}"
+            : char.ToUpperInvariant(local[0]).ToString();
     }
 }

@@ -51,6 +51,14 @@ main {
         text-overflow: ellipsis;
     }
 
+    .top-row ::deep .top-user {
+        font-size: 12px;
+        color: var(--ink-3);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
 @media (max-width: 640.98px) {
     .top-row {
         justify-content: space-between;
