@@ -493,5 +493,6 @@ src/**/wwwroot/appsettings*.Development.json
 
 # MoaMat - donnees et analyses non versionnees
 db/initial_load.sql
+db/seed_admin.sql
 Access_Data/
 Analyse/

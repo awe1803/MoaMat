@@ -24,6 +24,13 @@
                 <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Weather
             </NavLink>
         </div>
+        <AuthorizeView Policy="@MoaMatRoles.Policies.AdminOrHigher">
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="journal-audit">
+                    <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Journal d'audit
+                </NavLink>
+            </div>
+        </AuthorizeView>
     </nav>
 
     <AuthorizeView>
@@ -36,28 +43,3 @@
         </div>
     </AuthorizeView>
 </div>
-
-@code {
-    private bool collapseNavMenu = true;
-
-    private string? NavMenuCssClass => collapseNavMenu ? "collapse" : null;
-
-    private void ToggleNavMenu()
-    {
-        collapseNavMenu = !collapseNavMenu;
-    }
-
-    private static string Initials(string? name)
-    {
-        if (string.IsNullOrWhiteSpace(name))
-        {
-            return "?";
-        }
-
-        var local = name.Split('@')[0];
-        var parts = local.Split(new[] { '.', '-', '_' }, StringSplitOptions.RemoveEmptyEntries);
-        return parts.Length >= 2
-            ? $"{char.ToUpperInvariant(parts[0][0])}{char.ToUpperInvariant(parts[1][0])}"
-            : char.ToUpperInvariant(local[0]).ToString();
-    }
-}

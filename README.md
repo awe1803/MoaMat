@@ -15,9 +15,17 @@ Gestion de l'inventaire du matériel de plongée de l'ASBL Royal Moana.
 ```
 src/MoaMat.Web/         Application Blazor WASM PWA
 src/MoaMat.Web/Auth/    Authentification Supabase (session persistée, rôles)
-db/schema.sql           Schéma PostgreSQL (28 tables + RLS)
+src/MoaMat.Web/Data/    Accès aux données Supabase (journal d'audit…)
+db/schema.sql           Schéma PostgreSQL (28 tables + RLS activée sans policy)
+db/roles.sql            Table utilisateur_role + trigger + fonctions de rôle
+db/permissions.sql      Catalogue de permissions nommées + matrice par rôle
+db/rls.sql              Policies RLS explicites sur toutes les tables
+db/audit.sql            Journal d'audit append-only + triggers
 db/storage.sql          Buckets Supabase Storage + policies d'accès par rôle
 db/initial_load.sql     Reprise des données Access (généré)
+db/tests/rls_tests.sql  Tests de sécurité RLS / rôles / audit (non destructif)
+db/SECURITE.md          Modèle de sécurité + procédure de test
+supabase/functions/     Edge Functions (convention + déploiement CLI)
 tools/Generate-InitialLoad.ps1   Régénère db/initial_load.sql depuis Access_Data/csv/
 Access_Data/            Export CSV de l'ancienne base Access + doc de nommage
 Analyse/                Analyse fonctionnelle et plan de reprise
@@ -67,12 +75,17 @@ Variables/Secrets lus par `deploy.yml`, ni les assets publiés. Deux garde-fous 
   (`BrowserSessionPersistence`) : l'utilisateur reste connecté d'un rechargement
   ou d'une réouverture de la PWA à l'autre ; le jeton est rafraîchi
   automatiquement (`AutoRefreshToken`).
-- **Rôle applicatif** porté par le claim JWT `app_metadata.role`
-  (`lecture` < `gestion` < `admin` < `super-admin`). `app_metadata` n'est
-  modifiable que côté serveur (dashboard Supabase → *Authentication → Users →
-  App Metadata*, ou Admin API avec la clé `service_role`) : un utilisateur ne
-  peut pas s'auto-promouvoir depuis le client. Politiques d'autorisation Blazor
-  `role:lecture+` … `role:super-admin` (voir `MoaMatRoles`).
+- **Rôle applicatif** (`lecture` < `gestion` < `admin` < `super-admin`).
+  Source de vérité : la table `public.utilisateur_role`, alimentée par le
+  trigger Postgres `on_auth_user_created` au rôle `lecture` à la création du
+  compte (jamais un rôle élevé). Aucune synchronisation applicative côté
+  client. Les policies RLS lisent le rôle dans cette table ; le hook
+  `public.custom_access_token_hook` le recopie dans le claim JWT
+  `app_metadata.role`, que Blazor lit pour piloter la navigation (politiques
+  `role:lecture+` … `role:super-admin`, voir `MoaMatRoles`). Détail complet du
+  modèle (permissions nommées, RLS, audit, tests) : [`db/SECURITE.md`](db/SECURITE.md).
+- **Configuration Supabase requise** : *Authentication → Hooks* → activer
+  *Custom Access Token* → `public.custom_access_token_hook`.
 - **Configuration Supabase requise** : *Authentication → URL Configuration* →
   ajouter `<origine>/reinitialiser-mot-de-passe` aux *Redirect URLs* (local **et**
   URL GitHub Pages) pour que le lien de récupération revienne dans l'app.
@@ -106,15 +119,37 @@ Variables `SUPABASE_URL` / `SUPABASE_ANON_KEY` définies.
 
 Dans l'éditeur SQL Supabase (ou via `psql`), exécuter **dans l'ordre** :
 
-1. [`db/schema.sql`](db/schema.sql) — crée les 28 tables, les index et les policies
-   RLS permissives de démarrage.
+1. [`db/schema.sql`](db/schema.sql) — 28 tables, index ; RLS **activée sans
+   policy** (deny-by-default).
 2. [`db/initial_load.sql`](db/initial_load.sql) — charge les données reprises de
    l'ancienne base Access. Ré-exécutable (commence par
    `truncate ... restart identity cascade`).
-3. [`db/storage.sql`](db/storage.sql) — crée les buckets Supabase Storage
-   (`materiel-photos`, `certificats-requalification`, `factures`, tous privés),
-   les fonctions de rôle `public.moamat_role()` / `public.moamat_role_rank()` et
-   les policies d'accès par rôle sur `storage.objects`. Ré-exécutable.
+3. [`db/roles.sql`](db/roles.sql) — type `app_role`, table
+   `public.utilisateur_role` liée à `auth.users`, trigger
+   `on_auth_user_created`, fonctions de rôle, hook de jeton d'accès.
+4. [`db/permissions.sql`](db/permissions.sql) — catalogue `public.permission`,
+   matrice `public.role_permission`, `public.has_permission()`.
+5. [`db/rls.sql`](db/rls.sql) — policies RLS explicites sur **toutes** les
+   tables ; supprime la policy permissive `moamat_dev_all`.
+6. [`db/audit.sql`](db/audit.sql) — journal `public.audit_log` append-only et
+   triggers sur les tables sensibles.
+7. [`db/storage.sql`](db/storage.sql) — buckets Supabase Storage
+   (`materiel-photos`, `certificats-requalification`, `factures`, tous privés)
+   et policies d'accès par rôle sur `storage.objects`. Ré-exécutable.
+
+Tous ces scripts sont ré-exécutables. Ensuite : activer le hook
+*Custom Access Token* (Dashboard → Authentication → Hooks →
+`public.custom_access_token_hook`) et nommer le premier super-admin (requête
+documentée en bas de [`db/roles.sql`](db/roles.sql)).
+
+Tests de sécurité : `psql "$SUPABASE_DB_URL" -f db/tests/rls_tests.sql`
+(non destructif). Modèle complet : [`db/SECURITE.md`](db/SECURITE.md).
+
+Compte administrateur de démarrage (dev / première connexion) :
+[`db/seed_admin.sql`](db/seed_admin.sql) — crée `admin@moamat.local` /
+`MoAdmin1234` au rôle `admin` (mot de passe à changer ensuite). Le
+**super-admin** reste vacant : le poser via la requête en bas de
+[`db/roles.sql`](db/roles.sql).
 
 Contrôle rapide des volumes après chargement :
 
@@ -139,6 +174,26 @@ Le script relit les CSV de `Access_Data/csv/`, nettoie les valeurs (sentinelles 
 dates Access → `NULL`, drapeaux `0/1` → booléens, virgules décimales, apostrophes)
 et réécrit `db/initial_load.sql`. Les 8 tables `zz_` de l'export et le mot de passe
 en clair de `utilisateur` ne sont volontairement pas repris.
+
+## Edge Functions
+
+Fonctions serverless Supabase (Deno / TypeScript) dans
+[`supabase/functions/`](supabase/functions/). Convention (un dossier =
+une fonction, `_shared/` pour le commun) et procédure de déploiement CLI
+(`supabase link`, `supabase functions deploy`) : voir
+[`supabase/functions/README.md`](supabase/functions/README.md).
+
+Fonction de référence déployée : **`nominate-super-admin`** — nomme ou
+transfère le siège de super-admin (vacant à l'initialisation, jamais par
+défaut ni codé en dur), avec vérification de l'appelant et journalisation
+dans `audit_log`.
+
+## Journal d'audit
+
+Écran **`/journal-audit`** dans l'application, réservé aux rôles `admin` /
+`super-admin`. Il liste le contenu de `public.audit_log` (append-only) :
+changements de rôle, changements de statut terminal, nominations. Le lien
+n'apparaît dans le menu que pour ces rôles.
 
 ## Notes de modélisation
 

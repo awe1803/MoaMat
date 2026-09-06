@@ -1,0 +1,81 @@
+@page "/journal-audit"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using MoaMat.Web.Data
+@inject AuditLogService AuditLog
+
+<PageTitle>Journal d'audit — MoaMat</PageTitle>
+
+<h1>Journal d'audit</h1>
+
+<AuthorizeView Policy="@MoaMatRoles.Policies.AdminOrHigher">
+    <NotAuthorized>
+        <p class="ja-denied" role="alert">
+            Cet écran est réservé aux rôles <strong>administrateur</strong> et
+            <strong>super-administrateur</strong>.
+        </p>
+    </NotAuthorized>
+    <Authorized>
+        <p class="ja-lead">
+            Événements sensibles tracés automatiquement (changements de rôle,
+            changements de statut terminal…). Journal en ajout seul : aucune
+            entrée ne peut être modifiée ni supprimée.
+        </p>
+
+        <div class="ja-toolbar">
+            <label>
+                Type d'événement
+                <select @bind="_filter" @bind:after="ReloadAsync">
+                    <option value="">Tous</option>
+                    <option value="role.assigned">Rôle attribué</option>
+                    <option value="role.changed">Rôle modifié</option>
+                    <option value="role.revoked">Rôle retiré</option>
+                    <option value="superadmin.nominated">Nomination super-admin</option>
+                    <option value="status.terminal">Statut terminal</option>
+                </select>
+            </label>
+            <button type="button" @onclick="ReloadAsync" disabled="@_busy">Rafraîchir</button>
+        </div>
+
+        @if (_busy)
+        {
+            <p><em>Chargement…</em></p>
+        }
+        else if (_error is not null)
+        {
+            <p class="ja-denied" role="alert">@_error</p>
+        }
+        else if (_entries.Count == 0)
+        {
+            <p><em>Aucun événement.</em></p>
+        }
+        else
+        {
+            <table class="table ja-table">
+                <thead>
+                    <tr>
+                        <th>Date (UTC)</th>
+                        <th>Auteur</th>
+                        <th>Action</th>
+                        <th>Table</th>
+                        <th>Réf.</th>
+                        <th>Avant → Après</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var e in _entries)
+                    {
+                        <tr>
+                            <td>@e.OccurredAt.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                            <td>@(e.ActorEmail ?? e.ActorId?.ToString() ?? "système")</td>
+                            <td><code>@e.Action</code></td>
+                            <td>@e.EntityTable</td>
+                            <td>@e.EntityId</td>
+                            <td><code>@Summarize(e.Before)</code> → <code>@Summarize(e.After)</code></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+            <p class="ja-count">@_entries.Count entrée(s) affichée(s) — les plus récentes d'abord.</p>
+        }
+    </Authorized>
+</AuthorizeView>

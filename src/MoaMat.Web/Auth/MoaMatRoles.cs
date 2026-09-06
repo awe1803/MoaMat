@@ -15,9 +15,9 @@ public static class MoaMatRoles
     /// <summary>Politiques d'autorisation « au moins ce rôle ».</summary>
     public static class Policies
     {
-        public const string LectureOuPlus = "role:lecture+";
-        public const string GestionOuPlus = "role:gestion+";
-        public const string AdminOuPlus = "role:admin+";
+        public const string LectureOrHigher = "role:lecture+";
+        public const string GestionOrHigher = "role:gestion+";
+        public const string AdminOrHigher = "role:admin+";
         public const string SuperAdmin = "role:super-admin";
     }
 
