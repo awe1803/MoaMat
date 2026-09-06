@@ -98,7 +98,9 @@ end $$;
 --  2. public.utilisateur_role — chacun voit sa ligne ; l'attribution des rôles
 --     est réservée à role.assign (admin+) ; les rôles élevés (admin,
 --     super-admin) exigent role.assign_admin (super-admin). Nul ne peut
---     modifier sa propre ligne (anti-élévation).
+--     modifier sa propre ligne (anti-élévation). La suppression de la ligne
+--     d'un compte « CA » (rôle lecture) est elle aussi réservée au super-admin
+--     (role.assign_admin) : un admin ne peut pas « révoquer » un compte CA.
 -- -----------------------------------------------------------------------------
 
 alter table public.utilisateur_role enable row level security;
@@ -144,6 +146,8 @@ create policy utilisateur_role_del on public.utilisateur_role
         public.has_permission('role.assign')
         and user_id <> (select auth.uid())
         and (role not in ('admin', 'super-admin') or public.has_permission('role.assign_admin'))
+        -- Compte « CA » (rôle lecture) : révocation réservée au super-admin.
+        and (role <> 'lecture' or public.has_permission('role.assign_admin'))
     );
 
 -- -----------------------------------------------------------------------------

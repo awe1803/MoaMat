@@ -1,0 +1,98 @@
+@page "/comptes"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using MoaMat.Web.Data
+@inject CompteService Comptes
+@inject AuthenticationStateProvider AuthState
+
+<PageTitle>Comptes utilisateurs — MoaMat</PageTitle>
+
+<h1>Comptes utilisateurs</h1>
+
+<AuthorizeView Policy="@MoaMatRoles.Policies.AdminOrHigher">
+    <NotAuthorized>
+        <p class="gc-denied" role="alert">
+            Cet écran est réservé aux rôles <strong>administrateur</strong> et
+            <strong>super-administrateur</strong>.
+        </p>
+    </NotAuthorized>
+    <Authorized>
+        <p class="gc-lead">
+            Attribution des rôles et activation des comptes. Chaque changement est
+            inscrit au <a href="journal-audit">journal d'audit</a>. Un compte n'est
+            jamais supprimé — uniquement désactivé.
+        </p>
+
+        <div class="gc-toolbar">
+            <button type="button" @onclick="ReloadAsync" disabled="@_busy">Rafraîchir</button>
+        </div>
+
+        @if (_busy)
+        {
+            <p><em>Chargement…</em></p>
+        }
+        else if (_error is not null)
+        {
+            <p class="gc-denied" role="alert">@_error</p>
+        }
+        else if (_rows.Count == 0)
+        {
+            <p><em>Aucun compte.</em></p>
+        }
+        else
+        {
+            <table class="table gc-table">
+                <thead>
+                    <tr>
+                        <th>E-mail</th>
+                        <th>Rôle</th>
+                        <th>État</th>
+                        <th>Dernière connexion (UTC)</th>
+                        <th>Créé le</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var c in _rows)
+                    {
+                        <tr class="@(c.Desactive ? "gc-row-off" : null)">
+                            <td>
+                                @c.Email
+                                @if (c.UserId == _currentUserId)
+                                {
+                                    <span class="gc-self">(vous)</span>
+                                }
+                            </td>
+                            <td>
+                                <select class="gc-role" value="@c.Role"
+                                        @onchange="e => ChangeRoleAsync(c, e.Value as string)"
+                                        disabled="@RoleSelectDisabled(c)">
+                                    @foreach (var r in Roles)
+                                    {
+                                        <option value="@r" disabled="@OptionDisabled(r)">@r</option>
+                                    }
+                                </select>
+                            </td>
+                            <td>
+                                @if (c.Desactive)
+                                {
+                                    <span class="gc-badge gc-badge-off">Désactivé</span>
+                                }
+                                else
+                                {
+                                    <span class="gc-badge gc-badge-on">Actif</span>
+                                }
+                                <button type="button" class="gc-toggle"
+                                        @onclick="() => ToggleActifAsync(c)"
+                                        disabled="@ActifToggleDisabled(c)">
+                                    @(c.Desactive ? "Réactiver" : "Désactiver")
+                                </button>
+                            </td>
+                            <td>@(c.LastSignInAt?.UtcDateTime.ToString("yyyy-MM-dd HH:mm") ?? "—")</td>
+                            <td>@c.CreatedAt.UtcDateTime.ToString("yyyy-MM-dd")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+            <p class="gc-count">@_rows.Count compte(s). « CA » = compte au rôle <code>lecture</code> ; sa désactivation est réservée au super-administrateur.</p>
+        }
+    </Authorized>
+</AuthorizeView>

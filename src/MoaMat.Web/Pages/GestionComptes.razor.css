@@ -1,0 +1,65 @@
+.gc-lead {
+    max-width: 70ch;
+    color: var(--bs-secondary-color, #555);
+}
+
+.gc-denied {
+    padding: 0.75rem 1rem;
+    border-radius: 0.375rem;
+    background: rgba(220, 53, 69, 0.1);
+    color: #b02a37;
+    max-width: 60ch;
+}
+
+.gc-toolbar {
+    display: flex;
+    gap: 1rem;
+    margin: 1rem 0;
+}
+
+.gc-table {
+    font-size: 0.875rem;
+}
+
+.gc-table .gc-role {
+    font-size: 0.875rem;
+    padding: 0.15rem 0.35rem;
+}
+
+.gc-row-off td {
+    opacity: 0.55;
+}
+
+.gc-self {
+    margin-left: 0.35rem;
+    font-size: 0.75rem;
+    color: var(--bs-secondary-color, #777);
+}
+
+.gc-badge {
+    display: inline-block;
+    padding: 0.1rem 0.5rem;
+    border-radius: 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.gc-badge-on {
+    background: rgba(25, 135, 84, 0.15);
+    color: #146c43;
+}
+
+.gc-badge-off {
+    background: rgba(108, 117, 125, 0.2);
+    color: #495057;
+}
+
+.gc-toggle {
+    margin-left: 0.5rem;
+    font-size: 0.8125rem;
+}
+
+.gc-count {
+    font-size: 0.8125rem;
+    color: var(--bs-secondary-color, #777);
+}
