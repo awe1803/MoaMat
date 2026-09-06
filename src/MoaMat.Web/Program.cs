@@ -63,9 +63,9 @@ builder.Services.AddScoped<MoaMat.Web.Data.AuditLogService>();
 
 builder.Services.AddAuthorizationCore(options =>
 {
-    options.AddPolicy(MoaMatRoles.Policies.LectureOuPlus, p => p.RequireAssertion(HasRankAtLeast(1)));
-    options.AddPolicy(MoaMatRoles.Policies.GestionOuPlus, p => p.RequireAssertion(HasRankAtLeast(2)));
-    options.AddPolicy(MoaMatRoles.Policies.AdminOuPlus, p => p.RequireAssertion(HasRankAtLeast(3)));
+    options.AddPolicy(MoaMatRoles.Policies.LectureOrHigher, p => p.RequireAssertion(HasRankAtLeast(1)));
+    options.AddPolicy(MoaMatRoles.Policies.GestionOrHigher, p => p.RequireAssertion(HasRankAtLeast(2)));
+    options.AddPolicy(MoaMatRoles.Policies.AdminOrHigher, p => p.RequireAssertion(HasRankAtLeast(3)));
     options.AddPolicy(MoaMatRoles.Policies.SuperAdmin, p => p.RequireAssertion(HasRankAtLeast(4)));
 
     static Func<Microsoft.AspNetCore.Authorization.AuthorizationHandlerContext, bool> HasRankAtLeast(int min)
