@@ -57,6 +57,10 @@ builder.Services.AddScoped<SupabaseAuthenticationStateProvider>();
 builder.Services.AddScoped<AuthenticationStateProvider>(sp =>
     sp.GetRequiredService<SupabaseAuthenticationStateProvider>());
 builder.Services.AddScoped<AuthService>();
+
+// --- Accès aux données -------------------------------------------------------
+builder.Services.AddScoped<MoaMat.Web.Data.AuditLogService>();
+
 builder.Services.AddAuthorizationCore(options =>
 {
     options.AddPolicy(MoaMatRoles.Policies.LectureOuPlus, p => p.RequireAssertion(HasRankAtLeast(1)));

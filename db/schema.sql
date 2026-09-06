@@ -25,9 +25,10 @@
 --    * mesures « sales »      -> text (verbatim)
 --    * tout le reste          -> text
 --
---  RLS : activé sur toutes les tables avec une policy PERMISSIVE de démarrage
---  (anon + authenticated, lecture/écriture). À remplacer par le modèle à 4 rôles
---  de l'analyse fonctionnelle avant mise en production.
+--  RLS : activée sur toutes les tables, SANS policy (deny-by-default). Le modèle
+--  à 4 rôles (lecture / gestion / admin / super-admin) est posé par les fichiers
+--  db/roles.sql, db/permissions.sql, db/rls.sql et db/audit.sql, à exécuter
+--  après ce schéma et db/initial_load.sql (cf. README).
 --
 --  DESTRUCTIF : chaque table est supprimée (drop ... cascade) puis recréée.
 --  À exécuter avant db/initial_load.sql. Ré-exécutable sans erreur.
@@ -504,9 +505,14 @@ create index if not exists ix_materiel_didactique_site_id                 on mat
 create index if not exists ix_compresseur_releve_action_id                on compresseur_releve (action_id);
 
 -- =============================================================================
---  9. Row Level Security — policies PERMISSIVES de démarrage
---  ⚠ À remplacer par le modèle à 4 rôles (Super-admin / Admin / Gestion /
---    Lecture) de l'analyse fonctionnelle avant toute ouverture réelle.
+--  9. Row Level Security — activation seule (deny-by-default)
+--
+--  RLS est activée sur les 28 tables, SANS aucune policy : tant que
+--  db/rls.sql n'a pas été exécuté, les rôles anon / authenticated n'ont
+--  AUCUN accès (deny-by-default). Les policies explicites du modèle à 4 rôles
+--  sont définies dans db/rls.sql, à exécuter après db/roles.sql et
+--  db/permissions.sql. L'ancienne policy permissive « moamat_dev_all » est
+--  supprimée si elle existe encore.
 -- =============================================================================
 
 do $$
@@ -526,9 +532,6 @@ begin
     foreach t in array tables loop
         execute format('alter table %I enable row level security;', t);
         execute format('drop policy if exists moamat_dev_all on %I;', t);
-        execute format(
-            'create policy moamat_dev_all on %I for all to anon, authenticated using (true) with check (true);',
-            t);
     end loop;
 end $$;
 

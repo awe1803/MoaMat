@@ -3,19 +3,19 @@
 --  Cible : Supabase / PostgreSQL 15+
 -- =============================================================================
 --
---  À exécuter dans l'éditeur SQL Supabase APRÈS db/schema.sql.
+--  À exécuter dans l'éditeur SQL Supabase APRÈS db/schema.sql, db/roles.sql,
+--  db/permissions.sql et db/rls.sql (les fonctions de rôle
+--  public.moamat_role() / public.moamat_role_rank() sont désormais définies
+--  dans db/roles.sql).
 --  Ré-exécutable sans erreur (upsert des buckets, drop/create des policies).
 --
 --  Modèle de rôles (analyse fonctionnelle) — du moins au plus privilégié :
 --      lecture (1)  <  gestion (2)  <  admin (3)  <  super-admin (4)
 --
---  Le rôle applicatif est porté par le JWT de l'utilisateur, dans
---  « app_metadata.role ». app_metadata n'est modifiable que côté serveur
---  (dashboard Supabase, ou Management/Admin API avec la clé service_role) :
---  un utilisateur ne peut donc pas s'auto-promouvoir depuis le client WASM.
---  Pour attribuer un rôle :
---      Dashboard → Authentication → Users → (utilisateur) → App Metadata :
---          { "role": "gestion" }
+--  Source de vérité du rôle applicatif : la table public.utilisateur_role
+--  (cf. db/roles.sql). public.moamat_role() la lit via auth.uid() ; le client
+--  ne peut donc pas s'auto-promouvoir. Pour attribuer un rôle : agir sur
+--  public.utilisateur_role (SQL, écran d'administration, ou Edge Function).
 --
 --  Trois buckets, tous PRIVÉS (aucun accès anonyme, pas d'URL publique) :
 --      materiel-photos              photos de matériel
@@ -34,37 +34,17 @@ begin;
 
 -- -----------------------------------------------------------------------------
 --  1. Fonctions utilitaires de rôle
+--     public.moamat_role() / public.moamat_role_rank() sont définies dans
+--     db/roles.sql (source de vérité : public.utilisateur_role). Ce fichier
+--     suppose donc que db/roles.sql a déjà été exécuté.
 -- -----------------------------------------------------------------------------
 
--- Rôle applicatif de l'appelant, lu dans le claim JWT app_metadata.role.
--- Renvoie NULL si absent (utilisateur sans rôle => aucun accès).
-create or replace function public.moamat_role()
-returns text
-language sql
-stable
-as $$
-    select nullif(lower(coalesce(auth.jwt() -> 'app_metadata' ->> 'role', '')), '');
-$$;
-
--- Rang numérique d'un rôle (défaut : le rôle de l'appelant).
--- Rôle inconnu / NULL => 0 (aucun privilège).
-create or replace function public.moamat_role_rank(p_role text default public.moamat_role())
-returns integer
-language sql
-immutable
-as $$
-    select case lower(coalesce(p_role, ''))
-        when 'super-admin' then 4
-        when 'superadmin'  then 4
-        when 'admin'       then 3
-        when 'gestion'     then 2
-        when 'lecture'     then 1
-        else 0
-    end;
-$$;
-
-comment on function public.moamat_role()      is 'Rôle applicatif MoaMat de l''appelant (claim JWT app_metadata.role).';
-comment on function public.moamat_role_rank(text) is 'Rang numérique du rôle : lecture=1, gestion=2, admin=3, super-admin=4, inconnu=0.';
+do $$
+begin
+    if to_regprocedure('public.moamat_role_rank(text)') is null then
+        raise exception 'public.moamat_role_rank(text) absente : exécuter db/roles.sql avant db/storage.sql.';
+    end if;
+end $$;
 
 -- -----------------------------------------------------------------------------
 --  2. Buckets (upsert)

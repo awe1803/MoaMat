@@ -1,0 +1,6 @@
+# Supabase CLI — artefacts locaux, jamais versionnés
+.branches
+.temp
+.env
+.env.*
+!.env.example

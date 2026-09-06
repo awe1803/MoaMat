@@ -1,0 +1,48 @@
+# =============================================================================
+#  MoaMat — configuration Supabase CLI (supabase/config.toml)
+#  Doc : https://supabase.com/docs/guides/cli/config
+#
+#  Ce fichier ne contient AUCUN secret. Il sert au CLI (`supabase link`,
+#  `supabase functions deploy`, `supabase db push`, `supabase start`).
+#  Remplacer project_id par la référence réelle du projet (Dashboard →
+#  Project Settings → General → « Reference ID ») ou la laisser telle quelle
+#  et utiliser `supabase link --project-ref <ref>`.
+# =============================================================================
+
+project_id = "moamat"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "storage", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+major_version = 15
+
+[studio]
+enabled = true
+port = 54323
+
+[auth]
+enabled = true
+# URL de site + redirections : à aligner avec la config du Dashboard.
+site_url = "http://localhost:5173"
+additional_redirect_urls = ["http://localhost:5173/reinitialiser-mot-de-passe"]
+jwt_expiry = 3600
+enable_signup = true
+
+# Hook « custom access token » : recopie public.utilisateur_role.role dans le
+# claim app_metadata.role du JWT (cf. db/roles.sql). À activer aussi côté
+# Dashboard pour l'environnement hébergé (Authentication → Hooks).
+[auth.hook.custom_access_token]
+enabled = true
+uri = "pg-functions://postgres/public/custom_access_token_hook"
+
+[functions.nominate-super-admin]
+# Fonction privilégiée : elle vérifie elle-même l'identité de l'appelant via le
+# JWT transmis dans l'en-tête Authorization. On garde la vérification de JWT de
+# la plateforme active (défaut).
+verify_jwt = true
