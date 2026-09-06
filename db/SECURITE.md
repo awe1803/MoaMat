@@ -16,7 +16,8 @@ Dans l'éditeur SQL Supabase (ou `psql`), **dans cet ordre** :
 | 4 | `db/permissions.sql` | catalogue `permission`, matrice `role_permission`, `has_permission()` |
 | 5 | `db/rls.sql` | policies explicites sur **toutes** les tables ; supprime `moamat_dev_all` |
 | 6 | `db/audit.sql` | table `audit_log` append-only + triggers sur tables sensibles |
-| 7 | `db/storage.sql` | buckets + policies Storage (réutilise les fonctions de `roles.sql`) |
+| 7 | `db/comptes.sql` | vue `compte_utilisateur` (liste des comptes) + fonction `set_compte_actif()` (désactivation, jamais de suppression) |
+| 8 | `db/storage.sql` | buckets + policies Storage (réutilise les fonctions de `roles.sql`) |
 
 Test : `db/tests/rls_tests.sql` (non destructif, `begin … rollback`).
 
@@ -24,9 +25,9 @@ Test : `db/tests/rls_tests.sql` (non destructif, `begin … rollback`).
 
 | Rôle | Rang | Public visé | Peut… |
 |------|------|-------------|-------|
-| `lecture` | 1 | **CA**, membre simple (« User ») | lire l'inventaire et les référentiels. Aucune écriture. Ne voit ni l'annuaire des membres, ni le journal d'audit. |
-| `gestion` | 2 | équipe matériel | tout `lecture` + créer / modifier / supprimer les **items** (bouteilles, détendeurs, gilets, petit matériel, matériel didactique, pièces, relevés compresseur, prêts) + gérer l'annuaire des membres. **Pas** les référentiels, **pas** les finances. |
-| `admin` | 3 | administration | tout `gestion` + référentiels (échéances, tarifs, sites, gaz, règles) + achats / factures / devis + **consultation du journal d'audit** + attribution des rôles `lecture` / `gestion`. |
+| `lecture` | 1 | **CA**, membre simple (« User ») | lire l'inventaire et les référentiels. Aucune écriture. Ne voit ni l'annuaire des membres, ni le journal d'audit, ni les rôles des autres comptes (seulement sa propre ligne). |
+| `gestion` | 2 | équipe matériel | tout `lecture` + créer / modifier / supprimer les **items** (bouteilles, détendeurs, gilets, petit matériel, matériel didactique, pièces, relevés compresseur, prêts) + gérer l'annuaire des membres. **Pas** les référentiels, **pas** les finances, **pas** la liste des rôles. |
+| `admin` | 3 | administration | tout `gestion` + référentiels (échéances, tarifs, sites, gaz, règles) + achats / factures / devis + **consultation du journal d'audit** + **écran `/comptes`** (liste des comptes, attribution des rôles `lecture` / `gestion`, désactivation d'un compte non-CA). |
 | `super-admin` | 4 | siège unique, **vacant à l'initialisation** | tout `admin` + attribution des rôles `admin` / `super-admin` + nomination du super-admin + gestion du catalogue de permissions. |
 
 ### Source de vérité et absence de synchronisation client
@@ -47,13 +48,30 @@ Test : `db/tests/rls_tests.sql` (non destructif, `begin … rollback`).
 ### Attribuer / retirer un rôle
 
 - `lecture` / `gestion` : par un `admin` ou `super-admin`, via l'écran
-  d'administration (à venir) ou en SQL (`update public.utilisateur_role …`).
+  **`/comptes`** ou en SQL (`update public.utilisateur_role …`).
 - `admin` / `super-admin` : par un `super-admin` uniquement.
 - Personne ne peut modifier **sa propre** ligne (anti-élévation, policy
   `utilisateur_role_upd` / `_del`).
 - **Premier super-admin** : requête SQL documentée en bas de `db/roles.sql`,
   exécutée une fois par la personne qui administre le projet Supabase. Ensuite,
   Edge Function `nominate-super-admin`.
+
+### Désactivation d'un compte (jamais de suppression)
+
+- Un compte n'est **jamais supprimé** (traçabilité, intégrité des données
+  historiques). Il est **désactivé** : `db/comptes.sql` →
+  `public.set_compte_actif(user_id, actif)` bascule la colonne native
+  `auth.users.banned_until` (`'infinity'` = désactivé, `NULL` = actif).
+- La fonction (`SECURITY DEFINER`) revérifie la permission `compte.disable`
+  (`admin` + `super-admin`), **refuse l'auto-désactivation**, et journalise
+  (`compte.disabled` / `compte.enabled`).
+- **Règle « compte CA »** : un compte CA = un compte au rôle **`lecture`**. Un
+  `admin` ne peut **ni désactiver, ni supprimer la ligne de rôle** d'un compte
+  `lecture` (ni d'un compte `admin` / `super-admin`) : seul un `super-admin`
+  (permission `role.assign_admin`) le peut. Contrôlé côté données — fonction
+  `set_compte_actif` **et** policy `utilisateur_role_del`.
+- Liste des comptes : vue `public.compte_utilisateur` (e-mail, rôle, état),
+  réservée à la permission `compte.read` — 0 ligne pour un appelant non habilité.
 
 ## 3. Permissions nommées
 
@@ -66,8 +84,9 @@ Catalogue dans `public.permission`, matrice dans `public.role_permission`
   `read` / `create` / `update` / `delete` ;
 - transverses : `personne`, `fournisseur`, `referentiel`, `achat`, `devis` ;
 - système : `role.read` / `role.assign` / `role.assign_admin`,
-  `superadmin.nominate`, `audit.read`, `permission.read` / `permission.manage`,
-  `status.terminal.override`, `utilisateur_legacy.*`.
+  `compte.read` / `compte.disable`, `superadmin.nominate`, `audit.read`,
+  `permission.read` / `permission.manage`, `status.terminal.override`,
+  `utilisateur_legacy.*`.
 
 Les policies RLS n'écrivent **jamais** un rôle en dur : elles appellent
 `public.has_permission('<domaine>.<action>')`.
@@ -103,6 +122,7 @@ Les policies RLS n'écrivent **jamais** un rôle en dur : elles appellent
 | Action | Déclencheur |
 |--------|-------------|
 | `role.assigned` / `role.changed` / `role.revoked` | trigger sur `public.utilisateur_role` |
+| `compte.disabled` / `compte.enabled` | RPC `public.set_compte_actif()` (écran `/comptes`) |
 | `status.terminal` | triggers sur `bouteille` (déclassement), `detendeur` / `gilet` / `petit_materiel` / `materiel_didactique` (`est_declasse`), `pret` (clôture) |
 | `superadmin.nominated` | Edge Function `nominate-super-admin` (via RPC `audit_write`) |
 
@@ -150,6 +170,7 @@ lignes de test et entrées d'audit générées sont annulés.
 | Rôle `super-admin` jamais par défaut ; seul un super-admin élève à admin/super-admin | `nouveau compte -> rôle « lecture » par défaut`, `le trigger n'attribue jamais « super-admin »`, `admin — NE PEUT PAS attribuer le rôle admin / super-admin`, `super-admin — PEUT attribuer …` |
 | Anti auto-promotion | `User — ne peut pas s'auto-promouvoir` |
 | Journal d'audit append-only + alimenté par trigger | `audit — les changements de rôle sont tracés`, `audit — UPDATE/DELETE du journal refusé (append-only)`, `audit — UPDATE refusé même pour le propriétaire` |
+| **Gestion des comptes** : un Admin ne peut pas désactiver / révoquer un compte **CA** (rôle `lecture`) ni un compte élevé ; auto-désactivation refusée ; seul un Super-admin le peut ; désactivation tracée ; aucune suppression physique | `compte — admin NE PEUT PAS désactiver un compte CA / un super-admin / lui-même`, `compte — admin NE PEUT PAS supprimer la ligne de rôle d'un compte CA`, `compte — désactivation d'un compte « gestion » par un admin prend effet` + `… tracée (compte.disabled)` + `réactivation … (compte.enabled)`, `compte — super-admin PEUT désactiver un compte CA` + `… supprimer la ligne de rôle d'un compte CA`, `compte — lecture NE VOIT PAS la liste` + `NE PEUT PAS (ré)activer un compte` |
 
 ### 7.3 Contrôles manuels complémentaires (recette)
 
@@ -160,14 +181,20 @@ par rôle :
    `/connexion` redirigent vers la connexion ; un appel direct PostgREST
    (`curl …/rest/v1/bouteille`) sans jeton renvoie `[]`.
 2. **User / CA** (`lecture`) — l'inventaire s'affiche en lecture ; aucun bouton
-   de création/édition ; l'entrée « Journal d'audit » est absente du menu ;
-   `/journal-audit` affiche « accès réservé ».
+   de création/édition ; les entrées « Comptes » et « Journal d'audit » sont
+   absentes du menu ; `/journal-audit` et `/comptes` affichent « accès
+   réservé » ; la vue `compte_utilisateur` renvoie 0 ligne.
 3. **Équipe matériel** (`gestion`) — création/édition d'une bouteille OK ;
    tentative d'édition d'un tarif de requalification refusée.
 4. **Admin** — édition des référentiels OK ; écran « Journal d'audit »
-   accessible et peuplé ; attribution d'un rôle `gestion` OK ; attribution
-   d'un rôle `admin` refusée.
-5. **Super-admin** — attribution d'un rôle `admin` OK ; appel de l'Edge
+   accessible et peuplé ; écran **`/comptes`** accessible et peuplé ;
+   attribution d'un rôle `gestion` OK ; attribution d'un rôle `admin` refusée ;
+   désactivation / réactivation d'un compte `gestion` OK (visible dans le
+   journal : `compte.disabled` / `compte.enabled`) ; bouton de désactivation
+   inactif sur les comptes `lecture` (CA) et `admin` / `super-admin` ; appel
+   direct de `set_compte_actif` sur un compte `lecture` ⇒ erreur `42501`.
+5. **Super-admin** — attribution d'un rôle `admin` OK ; désactivation d'un
+   compte `lecture` (CA) OK ; auto-désactivation refusée ; appel de l'Edge
    Function `nominate-super-admin` OK ; l'action apparaît dans le journal
    d'audit (`superadmin.nominated`).
 6. **Audit inviolable** — via l'éditeur SQL avec la clé `service_role` :

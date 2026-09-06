@@ -8,7 +8,7 @@
 --
 --  Pré-requis : avoir exécuté, dans l'ordre,
 --      db/schema.sql, db/initial_load.sql, db/roles.sql, db/permissions.sql,
---      db/rls.sql, db/audit.sql
+--      db/rls.sql, db/audit.sql, db/comptes.sql
 --  puis lancer CE fichier avec un rôle non restreint :
 --      éditeur SQL Supabase (rôle « postgres »)
 --      ou :  psql "$SUPABASE_DB_URL" -f db/tests/rls_tests.sql
@@ -31,6 +31,10 @@
 --       super-admin peut attribuer le rôle admin / super-admin.
 --    7. Le journal d'audit est append-only (ni UPDATE ni DELETE) et alimenté
 --       par trigger lors d'un changement de rôle.
+--    8. Gestion des comptes : un admin ne peut ni désactiver ni révoquer un
+--       compte « CA » (rôle lecture) ni un compte élevé ; l'auto-désactivation
+--       est refusée ; seul un super-admin le peut ; toute désactivation est
+--       tracée. Aucune suppression physique de compte n'existe.
 -- =============================================================================
 
 begin;
@@ -143,12 +147,22 @@ begin
 end $$;
 
 -- 6a. Rôle par défaut à la création : « lecture », jamais « super-admin ».
+--     (Contrôle limité aux comptes de test a1..a6 : un super-admin réel a pu
+--      être nommé dans le projet, ce qui est sans rapport avec le trigger.)
 select moamat_test.expect(
     'nouveau compte -> role « lecture » par defaut',
     (select role::text from public.utilisateur_role where user_id = '00000000-0000-0000-0000-0000000000a6') = 'lecture');
 select moamat_test.expect(
     'le trigger n''attribue jamais « super-admin »',
-    (select count(*) from public.utilisateur_role where role = 'super-admin') = 0);
+    (select count(*) from public.utilisateur_role
+     where role = 'super-admin'
+       and user_id = any (array[
+           '00000000-0000-0000-0000-0000000000a1',
+           '00000000-0000-0000-0000-0000000000a2',
+           '00000000-0000-0000-0000-0000000000a3',
+           '00000000-0000-0000-0000-0000000000a4',
+           '00000000-0000-0000-0000-0000000000a5',
+           '00000000-0000-0000-0000-0000000000a6']::uuid[])) = 0);
 
 -- Élévation des rôles de test (en tant que postgres : pas de RLS).
 update public.utilisateur_role set role = 'gestion'     where user_id = '00000000-0000-0000-0000-0000000000a3';
@@ -309,22 +323,128 @@ select moamat_test.expect(
     (select count(*) from public.audit_log
      where entity_table = 'utilisateur_role' and action in ('role.changed', 'role.assigned')) >= 1);
 
+-- Côté client (authenticated) : aucune policy INSERT/UPDATE/DELETE sur
+-- audit_log => la RLS filtre l'écriture à 0 ligne (le trigger append-only,
+-- BEFORE, n'est même pas atteint). « Refusé » = 0 ligne affectée.
 select set_config('request.jwt.claims',
     json_build_object('sub', '00000000-0000-0000-0000-0000000000a4', 'email', 'test-4@moamat.test', 'role', 'authenticated')::text,
     true);
 set local role authenticated;
-select moamat_test.expect_raises(
-    'audit — UPDATE du journal refuse (append-only)',
+select moamat_test.expect_write_denied(
+    'audit — UPDATE du journal refuse cote client (aucune policy)',
     $q$ update public.audit_log set action = 'tampered' where id = (select min(id) from public.audit_log) $q$);
-select moamat_test.expect_raises(
-    'audit — DELETE dans le journal refuse (append-only)',
+select moamat_test.expect_write_denied(
+    'audit — DELETE dans le journal refuse cote client (aucune policy)',
     $q$ delete from public.audit_log where id = (select min(id) from public.audit_log) $q$);
 reset role;
 
--- Même « postgres » (propriétaire) ne peut ni modifier ni purger le journal.
+-- Même « postgres » (propriétaire, RLS contournée) est arrêté par le trigger
+-- append-only : ni modification ni purge du journal.
 select moamat_test.expect_raises(
-    'audit — UPDATE refuse meme pour le proprietaire',
+    'audit — UPDATE refuse meme pour le proprietaire (trigger append-only)',
     $q$ update public.audit_log set action = 'tampered' where id = (select min(id) from public.audit_log) $q$);
+select moamat_test.expect_raises(
+    'audit — DELETE refuse meme pour le proprietaire (trigger append-only)',
+    $q$ delete from public.audit_log where id = (select min(id) from public.audit_log) $q$);
+
+-- =============================================================================
+--  8. Gestion des comptes — écran /comptes (vue + public.set_compte_actif)
+--     « CA » = compte au rôle « lecture ». Un admin ne peut ni désactiver ni
+--     révoquer un compte CA / élevé, ni s'auto-désactiver ; un super-admin le
+--     peut ; toute désactivation est tracée.
+-- =============================================================================
+
+reset role;
+select set_config('request.jwt.claims', '', true);
+
+-- État de départ déterministe pour cette section (les sections 5-6 ont modifié
+-- les rôles de a1 / a2).
+--   a2 : lecture      -> compte « CA » et appelant « non habilité »
+--   a3 : gestion      -> cible désactivable par un admin
+--   a4 : admin
+--   a5 : super-admin
+--   a6 : lecture      -> compte témoin pour la suppression de ligne de rôle
+update public.utilisateur_role set role = 'lecture'
+    where user_id in ('00000000-0000-0000-0000-0000000000a1',
+                      '00000000-0000-0000-0000-0000000000a2',
+                      '00000000-0000-0000-0000-0000000000a6');
+update public.utilisateur_role set role = 'gestion'     where user_id = '00000000-0000-0000-0000-0000000000a3';
+update public.utilisateur_role set role = 'admin'       where user_id = '00000000-0000-0000-0000-0000000000a4';
+update public.utilisateur_role set role = 'super-admin' where user_id = '00000000-0000-0000-0000-0000000000a5';
+
+-- 8.1 Admin
+select set_config('request.jwt.claims',
+    json_build_object('sub', '00000000-0000-0000-0000-0000000000a4', 'email', 'test-4@moamat.test', 'role', 'authenticated')::text,
+    true);
+set local role authenticated;
+
+select moamat_test.expect('compte — admin VOIT la liste des comptes',
+    (select count(*) from public.compte_utilisateur) >= 6);
+select moamat_test.expect_raises(
+    'compte — admin NE PEUT PAS desactiver un compte CA (lecture)',
+    $q$ select public.set_compte_actif('00000000-0000-0000-0000-0000000000a2', false) $q$);
+select moamat_test.expect_raises(
+    'compte — admin NE PEUT PAS desactiver un super-admin',
+    $q$ select public.set_compte_actif('00000000-0000-0000-0000-0000000000a5', false) $q$);
+select moamat_test.expect_raises(
+    'compte — admin NE PEUT PAS s''auto-desactiver',
+    $q$ select public.set_compte_actif('00000000-0000-0000-0000-0000000000a4', false) $q$);
+select moamat_test.expect_write_denied(
+    'compte — admin NE PEUT PAS supprimer la ligne de role d''un compte CA',
+    $q$ delete from public.utilisateur_role where user_id = '00000000-0000-0000-0000-0000000000a6' $q$);
+
+select public.set_compte_actif('00000000-0000-0000-0000-0000000000a3', false);
+reset role;
+select moamat_test.expect(
+    'compte — la desactivation d''un compte « gestion » par un admin prend effet',
+    (select banned_until is not null from auth.users where id = '00000000-0000-0000-0000-0000000000a3'));
+select moamat_test.expect(
+    'compte — la desactivation est tracee dans le journal (compte.disabled)',
+    (select count(*) from public.audit_log
+     where action = 'compte.disabled' and entity_id = '00000000-0000-0000-0000-0000000000a3') >= 1);
+
+select set_config('request.jwt.claims',
+    json_build_object('sub', '00000000-0000-0000-0000-0000000000a4', 'email', 'test-4@moamat.test', 'role', 'authenticated')::text,
+    true);
+set local role authenticated;
+select public.set_compte_actif('00000000-0000-0000-0000-0000000000a3', true);
+reset role;
+select moamat_test.expect(
+    'compte — reactivation par un admin (banned_until remis a NULL)',
+    (select banned_until is null from auth.users where id = '00000000-0000-0000-0000-0000000000a3'));
+select moamat_test.expect(
+    'compte — la reactivation est tracee dans le journal (compte.enabled)',
+    (select count(*) from public.audit_log
+     where action = 'compte.enabled' and entity_id = '00000000-0000-0000-0000-0000000000a3') >= 1);
+
+-- 8.2 Super-admin
+select set_config('request.jwt.claims',
+    json_build_object('sub', '00000000-0000-0000-0000-0000000000a5', 'email', 'test-5@moamat.test', 'role', 'authenticated')::text,
+    true);
+set local role authenticated;
+
+select moamat_test.expect_write_ok(
+    'compte — super-admin PEUT supprimer la ligne de role d''un compte CA',
+    $q$ delete from public.utilisateur_role where user_id = '00000000-0000-0000-0000-0000000000a6' $q$);
+select public.set_compte_actif('00000000-0000-0000-0000-0000000000a2', false);
+reset role;
+select moamat_test.expect(
+    'compte — super-admin PEUT desactiver un compte CA (lecture)',
+    (select banned_until is not null from auth.users where id = '00000000-0000-0000-0000-0000000000a2'));
+
+-- 8.3 Utilisateur « lecture » — aucun accès à la gestion des comptes
+select set_config('request.jwt.claims',
+    json_build_object('sub', '00000000-0000-0000-0000-0000000000a1', 'email', 'test-1@moamat.test', 'role', 'authenticated')::text,
+    true);
+set local role authenticated;
+
+select moamat_test.expect('compte — lecture NE VOIT PAS la liste des comptes',
+    (select count(*) from public.compte_utilisateur) = 0);
+select moamat_test.expect_raises(
+    'compte — lecture NE PEUT PAS (re)activer un compte',
+    $q$ select public.set_compte_actif('00000000-0000-0000-0000-0000000000a3', true) $q$);
+
+reset role;
 
 -- =============================================================================
 --  Fin
