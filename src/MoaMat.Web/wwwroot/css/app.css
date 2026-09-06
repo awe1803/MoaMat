@@ -7,6 +7,10 @@
    Jetons de design
    ------------------------------------------------------------------------- */
 :root {
+    /* Laisse les contrôles natifs (formulaires, barres de défilement, etc.)
+       suivre le thème clair ou sombre du système. */
+    color-scheme: light dark;
+
     --ink: #12303F;
     --ink-2: #3C5A6C;
     --ink-3: #6B8593;
@@ -37,6 +41,88 @@
 
     --shadow-sm: 0 1px 3px rgba(18, 48, 63, .06);
     --shadow-md: 0 4px 10px rgba(18, 48, 63, .12);
+}
+
+/* ---------------------------------------------------------------------------
+   Mode sombre — suit automatiquement le réglage du système d'exploitation
+   (prefers-color-scheme). Aucun sélecteur, aucun bouton : rien à activer,
+   l'app bascule quand la machine passe en thème sombre.
+
+   Principe : on se contente de redéfinir les jetons de design. Les rares
+   composants qui utilisaient --ink comme *fond* (et non comme couleur de
+   texte) sont réoutillés juste après, car --ink devient clair ici.
+   ------------------------------------------------------------------------- */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --ink: #E4EBEA;
+        --ink-2: #AEC0C4;
+        --ink-3: #7E939A;
+
+        --teal: #3FA9BC;
+        --teal-dark: #7CD1DE;
+        --teal-light: #123840;
+
+        --bg: #0E1A20;
+        --surface: #15242B;
+        --surface-2: #1C2E36;
+
+        --border: #2A3D45;
+        --border-strong: #3B525B;
+
+        --red: #E98C81;
+        --red-bg: #3B211E;
+        --amber: #DAA24E;
+        --amber-bg: #392C19;
+        --green: #63BE8E;
+        --green-bg: #17321F;
+
+        --shadow-sm: 0 1px 3px rgba(0, 0, 0, .4);
+        --shadow-md: 0 4px 12px rgba(0, 0, 0, .5);
+    }
+
+    /* --ink servait de fond foncé sous un texte blanc : en sombre il est
+       clair, on bascule donc ces éléments sur le teal. */
+    .brand-mark,
+    .chip.active,
+    .btn.primary,
+    .tile-badge.new,
+    .auth-btn {
+        background: var(--teal-dark);
+        border-color: var(--teal-dark);
+        color: #06232A;
+    }
+
+    .btn.primary:hover,
+    .auth-btn:hover:not(:disabled) {
+        background: var(--teal);
+    }
+
+    .auth-spinner {
+        border-color: rgba(6, 35, 42, .35);
+        border-top-color: #06232A;
+    }
+
+    /* Bandeaux et messages : les couleurs de texte/bordure figées (marron,
+       vert foncé, rose) deviennent illisibles sur fond sombre. */
+    .alert-banner,
+    .alert-banner .txt,
+    .auth-msg.error,
+    .auth-msg.success {
+        border-color: var(--border);
+    }
+
+    .alert-banner .txt,
+    .auth-msg.error {
+        color: var(--red);
+    }
+
+    .auth-msg.success {
+        color: var(--green);
+    }
+
+    .alert-banner button {
+        color: #3B211E;
+    }
 }
 
 /* ---------------------------------------------------------------------------
