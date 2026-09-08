@@ -61,6 +61,8 @@ builder.Services.AddScoped<AuthService>();
 // --- Accès aux données -------------------------------------------------------
 builder.Services.AddScoped<MoaMat.Web.Data.AuditLogService>();
 builder.Services.AddScoped<MoaMat.Web.Data.CompteService>();
+builder.Services.AddScoped<MoaMat.Web.Data.ItemService>();
+builder.Services.AddScoped<MoaMat.Web.Data.LieuService>();
 
 builder.Services.AddAuthorizationCore(options =>
 {

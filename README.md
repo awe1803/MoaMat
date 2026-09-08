@@ -16,15 +16,20 @@ Gestion de l'inventaire du matériel de plongée de l'ASBL Royal Moana.
 src/MoaMat.Web/         Application Blazor WASM PWA
 src/MoaMat.Web/Auth/    Authentification Supabase (session persistée, rôles)
 src/MoaMat.Web/Data/    Accès aux données Supabase (journal d'audit…)
-db/schema.sql           Schéma PostgreSQL (28 tables + RLS activée sans policy)
+db/schema.sql           Schéma PostgreSQL (28 tables miroir Access + RLS sans policy)
+db/initial_load.sql     Reprise des données Access dans le miroir (généré)
 db/roles.sql            Table utilisateur_role + trigger + fonctions de rôle
 db/permissions.sql      Catalogue de permissions nommées + matrice par rôle
+db/model_item.sql       Modèle métier « Item » : entité de base + spécialisations,
+                        hiérarchie de lieux, statuts, détection des codes ambigus
+db/transform_item.sql   Reprise « miroir Access -> modèle Item » (rejouable)
 db/rls.sql              Policies RLS explicites sur toutes les tables
 db/audit.sql            Journal d'audit append-only + triggers
+db/comptes.sql          Vue + RPC de l'écran /comptes
 db/storage.sql          Buckets Supabase Storage + policies d'accès par rôle
-db/initial_load.sql     Reprise des données Access (généré)
 db/tests/rls_tests.sql  Tests de sécurité RLS / rôles / audit (non destructif)
 db/SECURITE.md          Modèle de sécurité + procédure de test
+db/MODELE.md            Modèle Item : stratégie d'héritage + reprise (justifié)
 supabase/functions/     Edge Functions (convention + déploiement CLI)
 tools/Generate-InitialLoad.ps1   Régénère db/initial_load.sql depuis Access_Data/csv/
 Access_Data/            Export CSV de l'ancienne base Access + doc de nommage
@@ -119,23 +124,34 @@ Variables `SUPABASE_URL` / `SUPABASE_ANON_KEY` définies.
 
 Dans l'éditeur SQL Supabase (ou via `psql`), exécuter **dans l'ordre** :
 
-1. [`db/schema.sql`](db/schema.sql) — 28 tables, index ; RLS **activée sans
-   policy** (deny-by-default).
+1. [`db/schema.sql`](db/schema.sql) — 28 tables miroir Access, index ; RLS
+   **activée sans policy** (deny-by-default).
 2. [`db/initial_load.sql`](db/initial_load.sql) — charge les données reprises de
-   l'ancienne base Access. Ré-exécutable (commence par
+   l'ancienne base Access dans le miroir. Ré-exécutable (commence par
    `truncate ... restart identity cascade`).
 3. [`db/roles.sql`](db/roles.sql) — type `app_role`, table
    `public.utilisateur_role` liée à `auth.users`, trigger
    `on_auth_user_created`, fonctions de rôle, hook de jeton d'accès.
 4. [`db/permissions.sql`](db/permissions.sql) — catalogue `public.permission`,
    matrice `public.role_permission`, `public.has_permission()`.
-5. [`db/rls.sql`](db/rls.sql) — policies RLS explicites sur **toutes** les
-   tables ; supprime la policy permissive `moamat_dev_all`.
-6. [`db/audit.sql`](db/audit.sql) — journal `public.audit_log` append-only et
-   triggers sur les tables sensibles.
-7. [`db/storage.sql`](db/storage.sql) — buckets Supabase Storage
-   (`materiel-photos`, `certificats-requalification`, `factures`, tous privés)
-   et policies d'accès par rôle sur `storage.objects`. Ré-exécutable.
+5. [`db/model_item.sql`](db/model_item.sql) — modèle métier **Item** : table de
+   base `public.item` + spécialisations `item_*`, hiérarchie de lieux
+   Section→Local→Contenant, catalogue `ref_statut`, détection des codes club
+   ambigus. RLS **activée sans policy**. Ne charge aucune donnée.
+6. [`db/transform_item.sql`](db/transform_item.sql) — reprise **miroir Access →
+   modèle Item** : typage fin (constats A11/A22), journal des rejets
+   `item_reject`, drapeau `code_club_ambigu`. Ré-exécutable
+   (`truncate ... restart identity cascade` sur `item*`). Détail et stratégie
+   d'héritage : [`db/MODELE.md`](db/MODELE.md).
+7. [`db/rls.sql`](db/rls.sql) — policies RLS explicites sur **toutes** les
+   tables (miroir + modèle Item) ; supprime la policy permissive `moamat_dev_all`.
+8. [`db/audit.sql`](db/audit.sql) — journal `public.audit_log` append-only et
+   triggers sur les tables sensibles (dont `item.statut_code` terminal).
+9. [`db/comptes.sql`](db/comptes.sql) — vue `public.compte_utilisateur` et RPC
+   `public.set_compte_actif` de l'écran /comptes.
+10. [`db/storage.sql`](db/storage.sql) — buckets Supabase Storage
+    (`materiel-photos`, `certificats-requalification`, `factures`, tous privés)
+    et policies d'accès par rôle sur `storage.objects`. Ré-exécutable.
 
 Tous ces scripts sont ré-exécutables. Ensuite : activer le hook
 *Custom Access Token* (Dashboard → Authentication → Hooks →
@@ -197,11 +213,24 @@ n'apparaît dans le menu que pour ces rôles.
 
 ## Notes de modélisation
 
-`db/schema.sql` reproduit **fidèlement** la structure de l'export Access (noms de
-`Access_Data/Nommage_tables_MOANA.md`). La normalisation métier (fusion des tables
-`*_sortie_inventaire`, suppression des colonnes calculées, typage fin des mesures
-type « 12 Li » / « 14,3 », activation des clés étrangères) est un chantier distinct :
-les contraintes FK sont pré-écrites mais commentées en fin de `schema.sql`.
+Deux étages :
+
+- **Miroir Access (staging)** — `db/schema.sql` + `db/initial_load.sql`
+  reproduisent **fidèlement** la structure de l'export Access (noms de
+  `Access_Data/Nommage_tables_MOANA.md`), tout en typage conservateur. Ce miroir
+  ne change pas.
+- **Modèle métier « Item » (opérationnel)** — `db/model_item.sql` +
+  `db/transform_item.sql` posent la couche normalisée lue et écrite par
+  l'application : entité de base `public.item` (clé technique `GENERATED ALWAYS`),
+  spécialisations `item_*` (**class-table inheritance**), hiérarchie de lieux
+  Section→Local→Contenant, catalogue `ref_statut`, typage fin des mesures
+  « 12 Li » / « 14,3 » (valeurs non converties tracées dans `item_reject`),
+  détection des codes club **ambigus** (dupliqués / non structurants — signalés,
+  jamais renumérotés). Stratégie d'héritage justifiée et procédure de reprise :
+  [`db/MODELE.md`](db/MODELE.md).
+
+L'activation des clés étrangères du miroir reste un chantier distinct (contraintes
+FK pré-écrites mais commentées en fin de `schema.sql`).
 
 ## Architecture cible
 
@@ -214,10 +243,20 @@ Découpage visé, **non encore implémenté** :
 | UI | présentation | composants Razor, aucun appel Supabase direct |
 
 État actuel : le `Supabase.Client` est enregistré en DI dans
-[`Program.cs`](src/MoaMat.Web/Program.cs). La couche **authentification** est en
-place (`src/MoaMat.Web/Auth/` : session persistée, `AuthenticationStateProvider`,
-`AuthService`, pages de connexion / réinitialisation, garde de routes, rôles). Le
-reste — modèles POCO, services d'accès aux données par agrégat, UI métier — n'est
-pas encore implémenté (l'UI hors auth est encore le gabarit Home / Counter /
-Weather). Cette mise en couches est liée à la normalisation métier décrite
-ci-dessus et sera traitée séparément.
+[`Program.cs`](src/MoaMat.Web/Program.cs). Sont en place :
+
+- **Authentification** (`src/MoaMat.Web/Auth/` : session persistée,
+  `AuthenticationStateProvider`, `AuthService`, pages de connexion /
+  réinitialisation, garde de routes, rôles) ;
+- **Comptes** (`Data/CompteService`, écran `/comptes`) et **journal d'audit**
+  (`/journal-audit`) ;
+- **Inventaire** (modèle Item) : POCO `Data/Item*.cs`, `Data/Lieux.cs`,
+  `Data/RefStatut.cs` ; services `Data/ItemService` (lecture via la vue
+  `v_item`, écriture / désactivation logique, filtres statut / échéance / lieu /
+  famille) et `Data/LieuService` (CRUD de la hiérarchie de lieux) ; écrans
+  `/inventaire` (liste + badge « code ambigu ») et `/lieux` (admin+).
+
+Rappel : ces services **ne sont pas** la ligne de sécurité — elle est portée par
+les policies RLS (`db/rls.sql`). Le reste de l'UI métier (fiches de détail par
+famille, prêts, achats…) et l'activation des FK du miroir seront traités
+séparément.

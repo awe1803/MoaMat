@@ -8,7 +8,8 @@
 --
 --  Pré-requis : avoir exécuté, dans l'ordre,
 --      db/schema.sql, db/initial_load.sql, db/roles.sql, db/permissions.sql,
---      db/rls.sql, db/audit.sql, db/comptes.sql
+--      db/model_item.sql, db/transform_item.sql, db/rls.sql, db/audit.sql,
+--      db/comptes.sql
 --  puis lancer CE fichier avec un rôle non restreint :
 --      éditeur SQL Supabase (rôle « postgres »)
 --      ou :  psql "$SUPABASE_DB_URL" -f db/tests/rls_tests.sql
