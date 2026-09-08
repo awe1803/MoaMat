@@ -15,10 +15,10 @@
 --    domaines métier : bouteille, detendeur, gilet, petit_materiel,
 --                      materiel_didactique, piece_detachee, compresseur, pret
 --    domaines transverses : personne, fournisseur, referentiel, achat, devis
---    domaines système : role, permission, audit, superadmin, status,
+--    domaines système : role, compte, permission, audit, superadmin, status,
 --                       utilisateur_legacy
 --    actions : read | create | update | delete   (+ actions dédiées : assign,
---              assign_admin, nominate, manage, override, read)
+--              assign_admin, nominate, disable, manage, override, read)
 --
 --  Les policies RLS (db/rls.sql) ne testent JAMAIS le rôle en dur : elles
 --  appellent public.has_permission('<domaine>.<action>').
@@ -116,6 +116,8 @@ insert into public.permission (code, description) values
     ('role.assign',               'Attribuer les rôles lecture / gestion'),
     ('role.assign_admin',         'Attribuer / retirer les rôles admin et super-admin'),
     ('superadmin.nominate',       'Nommer ou transférer le siège de super-admin'),
+    ('compte.read',               'Consulter la liste des comptes utilisateurs'),
+    ('compte.disable',            'Activer / désactiver un compte utilisateur'),
     ('permission.read',           'Consulter le catalogue des permissions'),
     ('permission.manage',         'Modifier le catalogue des permissions et la matrice'),
     ('audit.read',                'Consulter le journal d''audit'),
@@ -131,7 +133,9 @@ insert into public.permission (code, description) values
 --     lecture de ce fichier suffise à connaître les droits effectifs.
 -- -----------------------------------------------------------------------------
 
--- 3.1 lecture — « CA » / consultation. Lecture seule sur le métier.
+-- 3.1 lecture — « CA » / consultation. Lecture seule sur le métier. Ne voit que
+--     sa propre ligne de rôle (pas « role.read » : la liste des rôles de tous
+--     les comptes est réservée à admin+ via l'écran /comptes).
 insert into public.role_permission (role, permission_code) values
     ('lecture', 'bouteille.read'),
     ('lecture', 'detendeur.read'),
@@ -142,8 +146,7 @@ insert into public.role_permission (role, permission_code) values
     ('lecture', 'compresseur.read'),
     ('lecture', 'pret.read'),
     ('lecture', 'fournisseur.read'),
-    ('lecture', 'referentiel.read'),
-    ('lecture', 'role.read');
+    ('lecture', 'referentiel.read');
 
 -- 3.2 gestion — équipe matériel. Écriture sur les items, pas sur les
 --     référentiels ni les données financières.
@@ -158,8 +161,7 @@ insert into public.role_permission (role, permission_code) values
     ('gestion', 'pret.read'),        ('gestion', 'pret.create'),        ('gestion', 'pret.update'),        ('gestion', 'pret.delete'),
     ('gestion', 'personne.read'),    ('gestion', 'personne.create'),    ('gestion', 'personne.update'),
     ('gestion', 'fournisseur.read'), ('gestion', 'fournisseur.create'), ('gestion', 'fournisseur.update'),
-    ('gestion', 'referentiel.read'),
-    ('gestion', 'role.read');
+    ('gestion', 'referentiel.read');
 
 -- 3.3 admin — administration. Référentiels, finances, audit, attribution des
 --     rôles lecture / gestion.
@@ -178,6 +180,7 @@ insert into public.role_permission (role, permission_code) values
     ('admin', 'achat.read'),       ('admin', 'achat.create'),       ('admin', 'achat.update'),       ('admin', 'achat.delete'),
     ('admin', 'devis.read'),       ('admin', 'devis.create'),       ('admin', 'devis.update'),       ('admin', 'devis.delete'),
     ('admin', 'role.read'),        ('admin', 'role.assign'),
+    ('admin', 'compte.read'),      ('admin', 'compte.disable'),
     ('admin', 'permission.read'),
     ('admin', 'audit.read'),
     ('admin', 'status.terminal.override'),
@@ -200,6 +203,7 @@ insert into public.role_permission (role, permission_code) values
     ('super-admin', 'achat.read'),       ('super-admin', 'achat.create'),       ('super-admin', 'achat.update'),       ('super-admin', 'achat.delete'),
     ('super-admin', 'devis.read'),       ('super-admin', 'devis.create'),       ('super-admin', 'devis.update'),       ('super-admin', 'devis.delete'),
     ('super-admin', 'role.read'),        ('super-admin', 'role.assign'),        ('super-admin', 'role.assign_admin'),
+    ('super-admin', 'compte.read'),      ('super-admin', 'compte.disable'),
     ('super-admin', 'superadmin.nominate'),
     ('super-admin', 'permission.read'),  ('super-admin', 'permission.manage'),
     ('super-admin', 'audit.read'),
