@@ -1,37 +1,54 @@
-using System.ComponentModel.DataAnnotations;
+using Microsoft.AspNetCore.Components;
+using MoaMat.Domain.Authentication;
+using MoaMat.Web.Pages.Auth.Models;
 
 namespace MoaMat.Web.Pages.Auth;
 
-public partial class ForgotPassword
+/// <summary>
+/// "Forgot password" screen. The confirmation shown afterwards is deliberately
+/// identical whether or not the address exists, so the screen cannot be used to
+/// enumerate accounts.
+/// </summary>
+public partial class ForgotPassword : ComponentBase
 {
-    private readonly EmailOnly _model = new();
-    private bool _busy;
-    private bool _sent;
+    private readonly EmailInput _model = new();
+
+    private bool _isBusy;
+    private bool _isSent;
     private string? _error;
 
+    [Inject]
+    private IAuthenticationService Authentication { get; set; } = default!;
+
+    /// <summary>Sends the recovery e-mail.</summary>
     private async Task SubmitAsync()
     {
-        _busy = true;
+        if (_isBusy)
+        {
+            // Guard against a double submit: the button is disabled while busy,
+            // but a fast second Enter can still reach the handler.
+            return;
+        }
+
+        _isBusy = true;
         _error = null;
 
-        var result = await Auth.SendPasswordResetEmailAsync(_model.Email);
-
-        _busy = false;
-
-        if (result.Succeeded)
+        try
         {
-            _sent = true;
-        }
-        else
-        {
-            _error = result.Error;
-        }
-    }
+            var result = await Authentication.SendPasswordResetEmailAsync(_model.Email);
 
-    private sealed class EmailOnly
-    {
-        [Required(ErrorMessage = "E-mail requis.")]
-        [EmailAddress(ErrorMessage = "E-mail invalide.")]
-        public string Email { get; set; } = "";
+            if (result.Succeeded)
+            {
+                _isSent = true;
+            }
+            else
+            {
+                _error = result.Error;
+            }
+        }
+        finally
+        {
+            _isBusy = false;
+        }
     }
 }

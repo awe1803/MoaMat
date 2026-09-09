@@ -1,0 +1,101 @@
+@page "/comptes"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+
+<PageTitle>Comptes utilisateurs — MoaMat</PageTitle>
+
+<h1>Comptes utilisateurs</h1>
+
+<AuthorizeView Policy="@AuthorizationPolicyNames.AdministratorOrHigher">
+    <NotAuthorized>
+        <p class="gc-denied" role="alert">
+            Cet écran est réservé aux rôles <strong>administrateur</strong> et
+            <strong>super-administrateur</strong>.
+        </p>
+    </NotAuthorized>
+    <Authorized>
+        <p class="gc-lead">
+            Attribution des rôles et activation des comptes. Chaque changement est
+            inscrit au <a href="journal-audit">journal d'audit</a>. Un compte n'est
+            jamais supprimé — uniquement désactivé.
+        </p>
+
+        <div class="gc-toolbar">
+            <button type="button" @onclick="ReloadAsync" disabled="@_isBusy">Rafraîchir</button>
+        </div>
+
+        @if (_error is not null)
+        {
+            <p class="gc-denied" role="alert">@_error</p>
+        }
+
+        @if (_isBusy)
+        {
+            <p><em>Chargement…</em></p>
+        }
+        else if (_accounts.Count == 0)
+        {
+            <p><em>Aucun compte.</em></p>
+        }
+        else
+        {
+            <table class="table gc-table">
+                <thead>
+                    <tr>
+                        <th>E-mail</th>
+                        <th>Rôle</th>
+                        <th>État</th>
+                        <th>Dernière connexion (UTC)</th>
+                        <th>Créé le</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var account in _accounts)
+                    {
+                        <tr class="@(account.IsDisabled ? "gc-row-off" : null)">
+                            <td>
+                                @account.Email
+                                @if (!_policy.CanChangeRoleOf(account) && !_policy.CanChangeActivationOf(account))
+                                {
+                                    <span class="gc-self">(protégé)</span>
+                                }
+                            </td>
+                            <td>
+                                <select class="gc-role" value="@account.Role.Code"
+                                        @onchange="e => ChangeRoleAsync(account, e.Value as string)"
+                                        disabled="@(!_policy.CanChangeRoleOf(account))">
+                                    @foreach (var role in AppRole.Assignable)
+                                    {
+                                        <option value="@role.Code" disabled="@(!_policy.CanAssignRole(role))">
+                                            @role.Code
+                                        </option>
+                                    }
+                                </select>
+                            </td>
+                            <td>
+                                @if (account.IsDisabled)
+                                {
+                                    <span class="gc-badge gc-badge-off">Désactivé</span>
+                                }
+                                else
+                                {
+                                    <span class="gc-badge gc-badge-on">Actif</span>
+                                }
+                                <button type="button" class="gc-toggle"
+                                        @onclick="() => ToggleActivationAsync(account)"
+                                        disabled="@(_isBusy || !_policy.CanChangeActivationOf(account))">
+                                    @(account.IsDisabled ? "Réactiver" : "Désactiver")
+                                </button>
+                            </td>
+                            <td>@(account.LastSignInAt?.UtcDateTime.ToString("yyyy-MM-dd HH:mm") ?? "—")</td>
+                            <td>@account.CreatedAt.UtcDateTime.ToString("yyyy-MM-dd")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+            <p class="gc-count">
+                @_accounts.Count compte(s). « CA » = compte au rôle <code>lecture</code> ;
+                sa désactivation est réservée au super-administrateur.
+            </p>
+        }
+    </Authorized>
+</AuthorizeView>

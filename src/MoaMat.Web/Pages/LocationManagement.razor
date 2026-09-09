@@ -1,0 +1,108 @@
+@page "/lieux"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+
+<PageTitle>Lieux — MoaMat</PageTitle>
+
+<h1>Hiérarchie de lieux</h1>
+
+<AuthorizeView Policy="@AuthorizationPolicyNames.AdministratorOrHigher">
+    <NotAuthorized>
+        <p class="lx-denied" role="alert">
+            L'administration des lieux est réservée aux rôles
+            <strong>administrateur</strong> et <strong>super-administrateur</strong>.
+        </p>
+    </NotAuthorized>
+    <Authorized>
+        <p class="lx-lead">
+            Section → Local → Contenant. Le contenant est le niveau rattaché à un
+            item. <strong>La section n'est pas un périmètre de droits</strong>
+            (Q18.3) : c'est un axe de rangement.
+        </p>
+
+        @if (_error is not null)
+        {
+            <p class="lx-denied" role="alert">@_error</p>
+        }
+
+        <div class="lx-cols">
+            @* --- Sections --- *@
+            <section class="lx-col">
+                <h2>Sections</h2>
+                <ul class="lx-list">
+                    @foreach (var section in _sections)
+                    {
+                        <li class="@(section.Id == _selectedSectionId ? "lx-sel" : null)">
+                            <button type="button" class="lx-pick"
+                                    @onclick="() => SelectSectionAsync(section.Id)">@section.Label</button>
+                            <button type="button" class="lx-del" title="Supprimer"
+                                    @onclick="() => DeleteSectionAsync(section.Id)">✕</button>
+                        </li>
+                    }
+                </ul>
+                <div class="lx-add">
+                    <input placeholder="Nouvelle section" maxlength="@LocationLabel.MaxLength"
+                           @bind="_newSectionLabel" @bind:event="oninput" />
+                    <button type="button" @onclick="AddSectionAsync"
+                            disabled="@(_isBusy || string.IsNullOrWhiteSpace(_newSectionLabel))">Ajouter</button>
+                </div>
+            </section>
+
+            @* --- Locaux --- *@
+            <section class="lx-col">
+                <h2>Locaux</h2>
+                @if (_selectedSectionId is null)
+                {
+                    <p class="lx-hint"><em>Choisir une section.</em></p>
+                }
+                else
+                {
+                    <ul class="lx-list">
+                        @foreach (var room in _rooms)
+                        {
+                            <li class="@(room.Id == _selectedRoomId ? "lx-sel" : null)">
+                                <button type="button" class="lx-pick"
+                                        @onclick="() => SelectRoomAsync(room.Id)">@room.Label</button>
+                                <button type="button" class="lx-del" title="Supprimer"
+                                        @onclick="() => DeleteRoomAsync(room.Id)">✕</button>
+                            </li>
+                        }
+                    </ul>
+                    <div class="lx-add">
+                        <input placeholder="Nouveau local" maxlength="@LocationLabel.MaxLength"
+                               @bind="_newRoomLabel" @bind:event="oninput" />
+                        <button type="button" @onclick="AddRoomAsync"
+                                disabled="@(_isBusy || string.IsNullOrWhiteSpace(_newRoomLabel))">Ajouter</button>
+                    </div>
+                }
+            </section>
+
+            @* --- Contenants --- *@
+            <section class="lx-col">
+                <h2>Contenants</h2>
+                @if (_selectedRoomId is null)
+                {
+                    <p class="lx-hint"><em>Choisir un local.</em></p>
+                }
+                else
+                {
+                    <ul class="lx-list">
+                        @foreach (var container in _containers)
+                        {
+                            <li>
+                                <span class="lx-pick">@container.Label</span>
+                                <button type="button" class="lx-del" title="Supprimer"
+                                        @onclick="() => DeleteContainerAsync(container.Id)">✕</button>
+                            </li>
+                        }
+                    </ul>
+                    <div class="lx-add">
+                        <input placeholder="Nouveau contenant" maxlength="@LocationLabel.MaxLength"
+                               @bind="_newContainerLabel" @bind:event="oninput" />
+                        <button type="button" @onclick="AddContainerAsync"
+                                disabled="@(_isBusy || string.IsNullOrWhiteSpace(_newContainerLabel))">Ajouter</button>
+                    </div>
+                }
+            </section>
+        </div>
+    </Authorized>
+</AuthorizeView>

@@ -1,58 +1,76 @@
-using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Authorization;
+using MoaMat.Domain.Authentication;
+using MoaMat.Domain.Navigation;
+using MoaMat.Web.Pages.Auth.Models;
 
 namespace MoaMat.Web.Pages.Auth;
 
-public partial class Login
+/// <summary>Sign-in screen.</summary>
+public partial class Login : ComponentBase
 {
-    private readonly Credentials _model = new();
-    private bool _busy;
+    private readonly CredentialsInput _model = new();
+
+    private bool _isBusy;
     private string? _error;
 
+    /// <summary>
+    /// Where to go after a successful sign-in. It comes from the query string,
+    /// so it is never used raw: <see cref="RelativeReturnUrl"/> reduces anything
+    /// that could leave the application to the home page.
+    /// </summary>
     [SupplyParameterFromQuery(Name = "returnUrl")]
     public string? ReturnUrl { get; set; }
 
+    [Inject]
+    private IAuthenticationService Authentication { get; set; } = default!;
+
+    [Inject]
+    private NavigationManager Navigation { get; set; } = default!;
+
+    [Inject]
+    private AuthenticationStateProvider AuthenticationState { get; set; } = default!;
+
+    /// <inheritdoc />
     protected override async Task OnInitializedAsync()
     {
-        // Déjà connecté (session restaurée) : on saute l'écran.
-        var state = await AuthState.GetAuthenticationStateAsync();
+        // Already signed in (session restored): skip the screen entirely.
+        var state = await AuthenticationState.GetAuthenticationStateAsync();
         if (state.User.Identity?.IsAuthenticated == true)
         {
-            Navigation.NavigateTo(SafeReturnUrl(), replace: true);
+            NavigateToTarget();
         }
     }
 
     private async Task SubmitAsync()
     {
-        _busy = true;
+        if (_isBusy)
+        {
+            return;
+        }
+
+        _isBusy = true;
         _error = null;
 
-        var result = await Auth.SignInAsync(_model.Email, _model.Password);
-
-        _busy = false;
-
-        if (result.Succeeded)
+        try
         {
-            Navigation.NavigateTo(SafeReturnUrl(), replace: true);
+            var result = await Authentication.SignInAsync(_model.Email, _model.Password);
+
+            if (result.Succeeded)
+            {
+                NavigateToTarget();
+            }
+            else
+            {
+                _error = result.Error;
+            }
         }
-        else
+        finally
         {
-            _error = result.Error;
+            _isBusy = false;
         }
     }
 
-    private string SafeReturnUrl()
-        => string.IsNullOrWhiteSpace(ReturnUrl) || ReturnUrl.Contains("://") || ReturnUrl.StartsWith("//")
-            ? ""
-            : ReturnUrl;
-
-    private sealed class Credentials
-    {
-        [Required(ErrorMessage = "E-mail requis.")]
-        [EmailAddress(ErrorMessage = "E-mail invalide.")]
-        public string Email { get; set; } = "";
-
-        [Required(ErrorMessage = "Mot de passe requis.")]
-        public string Password { get; set; } = "";
-    }
+    private void NavigateToTarget() =>
+        Navigation.NavigateTo(RelativeReturnUrl.FromCandidate(ReturnUrl).Value, replace: true);
 }

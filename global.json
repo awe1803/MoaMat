@@ -1,0 +1,6 @@
+{
+  "$comment": "The .NET 10 SDK needs this opt-in to run xUnit v3 tests, which speak Microsoft.Testing.Platform rather than the legacy VSTest protocol.",
+  "test": {
+    "runner": "Microsoft.Testing.Platform"
+  }
+}

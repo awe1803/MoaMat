@@ -1,8 +1,5 @@
 @page "/connexion"
 @layout Layout.AuthLayout
-@inject AuthService Auth
-@inject NavigationManager Navigation
-@inject AuthenticationStateProvider AuthState
 
 <PageTitle>Connexion — MoaMat</PageTitle>
 
@@ -20,20 +17,20 @@
     <div class="auth-field">
         <label for="email">Adresse e-mail</label>
         <InputText id="email" @bind-Value="_model.Email" type="email" autocomplete="username"
-                   autofocus disabled="@_busy" />
+                   autofocus disabled="@_isBusy" />
         <ValidationMessage For="() => _model.Email" />
     </div>
 
     <div class="auth-field">
         <label for="password">Mot de passe</label>
         <InputText id="password" @bind-Value="_model.Password" type="password"
-                   autocomplete="current-password" disabled="@_busy" />
+                   autocomplete="current-password" disabled="@_isBusy" />
         <ValidationMessage For="() => _model.Password" />
     </div>
 
     <div class="auth-actions">
-        <button type="submit" class="auth-btn" disabled="@_busy">
-            @if (_busy)
+        <button type="submit" class="auth-btn" disabled="@_isBusy">
+            @if (_isBusy)
             {
                 <span class="auth-spinner" aria-hidden="true"></span>
                 <span>Connexion…</span>

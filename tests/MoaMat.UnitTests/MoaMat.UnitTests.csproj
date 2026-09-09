@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Unit tests over the hexagon core: the invariants and decisions that can be
+    verified without a network. Adapters that only translate a provider call are
+    covered by the integration suite in db/tests, not here.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>MoaMat.UnitTests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\MoaMat.Domain\MoaMat.Domain.csproj" />
+    <ProjectReference Include="..\..\src\MoaMat.Infrastructure\MoaMat.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+  </ItemGroup>
+
+</Project>
