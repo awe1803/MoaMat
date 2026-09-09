@@ -3,8 +3,9 @@
 --  Cible : Supabase / PostgreSQL 15+
 -- =============================================================================
 --
---  À exécuter APRÈS db/roles.sql et db/permissions.sql (et db/schema.sql /
---  db/initial_load.sql). Ré-exécutable sans erreur.
+--  À exécuter APRÈS db/roles.sql, db/permissions.sql, db/model_item.sql et
+--  db/transform_item.sql (et db/schema.sql / db/initial_load.sql).
+--  Ré-exécutable sans erreur.
 --
 --  Principe : RLS activée sur TOUTES les tables métier + système, SANS
 --  EXCEPTION. Aucune table n'est exposée sans policy explicite. La policy
@@ -58,7 +59,21 @@ declare
         {"t": "fournisseur",                  "d": "fournisseur"},
         {"t": "personne",                     "d": "personne"},
         {"t": "pret",                         "d": "pret"},
-        {"t": "utilisateur",                  "d": "utilisateur_legacy"}
+        {"t": "utilisateur",                  "d": "utilisateur_legacy"},
+
+        {"t": "ref_statut",                   "d": "referentiel"},
+        {"t": "lieu_section",                 "d": "referentiel"},
+        {"t": "lieu_local",                   "d": "referentiel"},
+        {"t": "lieu_contenant",               "d": "referentiel"},
+        {"t": "lieu_mapping",                 "d": "referentiel"},
+
+        {"t": "item",                         "d": "item"},
+        {"t": "item_bouteille",               "d": "item"},
+        {"t": "item_detendeur",               "d": "item"},
+        {"t": "item_gilet",                   "d": "item"},
+        {"t": "item_petit_materiel",          "d": "item"},
+        {"t": "item_materiel_didactique",     "d": "item"},
+        {"t": "item_piece_detachee",          "d": "item"}
     ]$json$;
     v_item jsonb;
     v_t    text;
@@ -173,6 +188,18 @@ create policy role_permission_manage on public.role_permission
     for all to authenticated
     using (public.has_permission('permission.manage'))
     with check (public.has_permission('permission.manage'));
+
+-- -----------------------------------------------------------------------------
+--  3bis. Journal des rejets de reprise (db/model_item.sql) — lecture seule,
+--        réservée à « item.read ». Aucune écriture cliente : la table n'est
+--        alimentée que par db/transform_item.sql (exécuté hors RLS).
+-- -----------------------------------------------------------------------------
+
+alter table public.item_reject enable row level security;
+drop policy if exists item_reject_sel on public.item_reject;
+create policy item_reject_sel on public.item_reject
+    for select to authenticated using (public.has_permission('item.read'));
+-- (Volontairement AUCUNE policy insert/update/delete.)
 
 -- -----------------------------------------------------------------------------
 --  4. Contrôle : aucune table de public. ne doit rester sans RLS.

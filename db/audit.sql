@@ -3,8 +3,8 @@
 --  Cible : Supabase / PostgreSQL 15+
 -- =============================================================================
 --
---  À exécuter APRÈS db/roles.sql, db/permissions.sql et db/rls.sql.
---  Ré-exécutable sans erreur.
+--  À exécuter APRÈS db/roles.sql, db/permissions.sql, db/model_item.sql,
+--  db/transform_item.sql et db/rls.sql. Ré-exécutable sans erreur.
 --
 --  public.audit_log est APPEND-ONLY :
 --    * aucune policy INSERT / UPDATE / DELETE => les clients (anon,
@@ -221,5 +221,49 @@ drop trigger if exists audit_terminal_status on public.pret;
 create trigger audit_terminal_status
     after update on public.pret
     for each row execute function public.tg_audit_terminal_status('est_cloture');
+
+-- -----------------------------------------------------------------------------
+--  7. Trigger : statut terminal du modèle Item (db/model_item.sql)
+--     Journalise tout changement de public.item.statut_code dès que l'ancien
+--     OU le nouveau statut est terminal (ref_statut.est_terminal). Le retour
+--     depuis un statut terminal est par ailleurs soumis à la permission
+--     « status.terminal.override » (couche applicative / RLS).
+-- -----------------------------------------------------------------------------
+
+create or replace function public.tg_audit_item_statut_terminal()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+    v_old_term boolean;
+    v_new_term boolean;
+begin
+    if new.statut_code is not distinct from old.statut_code then
+        return null;
+    end if;
+    select est_terminal into v_old_term from public.ref_statut where code = old.statut_code;
+    select est_terminal into v_new_term from public.ref_statut where code = new.statut_code;
+
+    if coalesce(v_old_term, false) or coalesce(v_new_term, false) then
+        perform public.audit_write(
+            'status.terminal',
+            'item',
+            new.id::text,
+            jsonb_build_object('statut_code', old.statut_code),
+            jsonb_build_object('statut_code', new.statut_code),
+            jsonb_build_object('op', tg_op, 'column', 'statut_code',
+                               'from_terminal', coalesce(v_old_term, false),
+                               'to_terminal', coalesce(v_new_term, false))
+        );
+    end if;
+    return null;
+end $$;
+
+drop trigger if exists audit_item_statut_terminal on public.item;
+create trigger audit_item_statut_terminal
+    after update of statut_code on public.item
+    for each row execute function public.tg_audit_item_statut_terminal();
 
 commit;

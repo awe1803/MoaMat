@@ -14,6 +14,8 @@
 --  Convention de nommage : <domaine>.<action>, en minuscules.
 --    domaines métier : bouteille, detendeur, gilet, petit_materiel,
 --                      materiel_didactique, piece_detachee, compresseur, pret
+--    domaine inventaire unifié : item  (modèle db/model_item.sql — couvre la
+--                      table public.item et ses spécialisations item_*)
 --    domaines transverses : personne, fournisseur, referentiel, achat, devis
 --    domaines système : role, compte, permission, audit, superadmin, status,
 --                       utilisateur_legacy
@@ -86,6 +88,11 @@ insert into public.permission (code, description) values
     ('pret.create',               'Créer un prêt'),
     ('pret.update',               'Modifier un prêt'),
     ('pret.delete',               'Supprimer un prêt'),
+    -- Inventaire unifié (modèle Item — db/model_item.sql)
+    ('item.read',                 'Consulter l''inventaire (modèle Item)'),
+    ('item.create',               'Créer un item d''inventaire'),
+    ('item.update',               'Modifier un item d''inventaire'),
+    ('item.delete',               'Supprimer un item d''inventaire'),
     -- Annuaire des membres (données personnelles — RGPD)
     ('personne.read',             'Consulter l''annuaire des membres'),
     ('personne.create',           'Ajouter un membre à l''annuaire'),
@@ -145,6 +152,7 @@ insert into public.role_permission (role, permission_code) values
     ('lecture', 'piece_detachee.read'),
     ('lecture', 'compresseur.read'),
     ('lecture', 'pret.read'),
+    ('lecture', 'item.read'),
     ('lecture', 'fournisseur.read'),
     ('lecture', 'referentiel.read');
 
@@ -159,6 +167,7 @@ insert into public.role_permission (role, permission_code) values
     ('gestion', 'piece_detachee.read'),      ('gestion', 'piece_detachee.create'),      ('gestion', 'piece_detachee.update'),      ('gestion', 'piece_detachee.delete'),
     ('gestion', 'compresseur.read'), ('gestion', 'compresseur.create'), ('gestion', 'compresseur.update'), ('gestion', 'compresseur.delete'),
     ('gestion', 'pret.read'),        ('gestion', 'pret.create'),        ('gestion', 'pret.update'),        ('gestion', 'pret.delete'),
+    ('gestion', 'item.read'),        ('gestion', 'item.create'),        ('gestion', 'item.update'),        ('gestion', 'item.delete'),
     ('gestion', 'personne.read'),    ('gestion', 'personne.create'),    ('gestion', 'personne.update'),
     ('gestion', 'fournisseur.read'), ('gestion', 'fournisseur.create'), ('gestion', 'fournisseur.update'),
     ('gestion', 'referentiel.read');
@@ -174,6 +183,7 @@ insert into public.role_permission (role, permission_code) values
     ('admin', 'piece_detachee.read'),      ('admin', 'piece_detachee.create'),      ('admin', 'piece_detachee.update'),      ('admin', 'piece_detachee.delete'),
     ('admin', 'compresseur.read'), ('admin', 'compresseur.create'), ('admin', 'compresseur.update'), ('admin', 'compresseur.delete'),
     ('admin', 'pret.read'),        ('admin', 'pret.create'),        ('admin', 'pret.update'),        ('admin', 'pret.delete'),
+    ('admin', 'item.read'),        ('admin', 'item.create'),        ('admin', 'item.update'),        ('admin', 'item.delete'),
     ('admin', 'personne.read'),    ('admin', 'personne.create'),    ('admin', 'personne.update'),    ('admin', 'personne.delete'),
     ('admin', 'fournisseur.read'), ('admin', 'fournisseur.create'), ('admin', 'fournisseur.update'), ('admin', 'fournisseur.delete'),
     ('admin', 'referentiel.read'), ('admin', 'referentiel.create'), ('admin', 'referentiel.update'), ('admin', 'referentiel.delete'),
@@ -197,6 +207,7 @@ insert into public.role_permission (role, permission_code) values
     ('super-admin', 'piece_detachee.read'),      ('super-admin', 'piece_detachee.create'),      ('super-admin', 'piece_detachee.update'),      ('super-admin', 'piece_detachee.delete'),
     ('super-admin', 'compresseur.read'), ('super-admin', 'compresseur.create'), ('super-admin', 'compresseur.update'), ('super-admin', 'compresseur.delete'),
     ('super-admin', 'pret.read'),        ('super-admin', 'pret.create'),        ('super-admin', 'pret.update'),        ('super-admin', 'pret.delete'),
+    ('super-admin', 'item.read'),        ('super-admin', 'item.create'),        ('super-admin', 'item.update'),        ('super-admin', 'item.delete'),
     ('super-admin', 'personne.read'),    ('super-admin', 'personne.create'),    ('super-admin', 'personne.update'),    ('super-admin', 'personne.delete'),
     ('super-admin', 'fournisseur.read'), ('super-admin', 'fournisseur.create'), ('super-admin', 'fournisseur.update'), ('super-admin', 'fournisseur.delete'),
     ('super-admin', 'referentiel.read'), ('super-admin', 'referentiel.create'), ('super-admin', 'referentiel.update'), ('super-admin', 'referentiel.delete'),

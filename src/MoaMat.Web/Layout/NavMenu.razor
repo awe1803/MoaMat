@@ -24,7 +24,19 @@
                 <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Weather
             </NavLink>
         </div>
+        <AuthorizeView>
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="inventaire">
+                    <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Inventaire
+                </NavLink>
+            </div>
+        </AuthorizeView>
         <AuthorizeView Policy="@MoaMatRoles.Policies.AdminOrHigher">
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="lieux">
+                    <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Lieux
+                </NavLink>
+            </div>
             <div class="nav-item px-3">
                 <NavLink class="nav-link" href="comptes">
                     <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Comptes

@@ -1,0 +1,90 @@
+.lx-lead {
+    max-width: 78ch;
+    color: var(--bs-secondary-color, #555);
+}
+
+.lx-denied {
+    padding: 0.75rem 1rem;
+    border-radius: 0.375rem;
+    background: rgba(220, 53, 69, 0.1);
+    color: #b02a37;
+    max-width: 60ch;
+}
+
+.lx-cols {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    margin-top: 1rem;
+}
+
+.lx-col {
+    flex: 1 1 220px;
+    min-width: 220px;
+}
+
+.lx-col h2 {
+    font-size: 1rem;
+    margin-bottom: 0.5rem;
+}
+
+.lx-list {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 0.75rem;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 0.375rem;
+    max-height: 22rem;
+    overflow-y: auto;
+}
+
+.lx-list li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.1rem 0.25rem 0.1rem 0.5rem;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.lx-list li:last-child {
+    border-bottom: none;
+}
+
+.lx-list li.lx-sel {
+    background: rgba(13, 110, 253, 0.1);
+}
+
+.lx-pick {
+    flex: 1;
+    text-align: left;
+    background: none;
+    border: none;
+    padding: 0.2rem 0;
+    font-size: 0.875rem;
+    cursor: pointer;
+}
+
+.lx-del {
+    background: none;
+    border: none;
+    color: #b02a37;
+    cursor: pointer;
+    font-size: 0.8rem;
+    padding: 0.2rem 0.35rem;
+}
+
+.lx-add {
+    display: flex;
+    gap: 0.4rem;
+}
+
+.lx-add input {
+    flex: 1;
+    font-size: 0.8125rem;
+    padding: 0.2rem 0.4rem;
+}
+
+.lx-hint {
+    font-size: 0.8125rem;
+    color: var(--bs-secondary-color, #777);
+}

@@ -1,0 +1,99 @@
+@page "/lieux"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using MoaMat.Web.Data
+@inject LieuService Lieux
+
+<PageTitle>Lieux — MoaMat</PageTitle>
+
+<h1>Hiérarchie de lieux</h1>
+
+<AuthorizeView Policy="@MoaMatRoles.Policies.AdminOrHigher">
+    <NotAuthorized>
+        <p class="lx-denied" role="alert">
+            L'administration des lieux est réservée aux rôles
+            <strong>administrateur</strong> et <strong>super-administrateur</strong>.
+        </p>
+    </NotAuthorized>
+    <Authorized>
+        <p class="lx-lead">
+            Section → Local → Contenant. Le contenant est le niveau rattaché à un
+            item. <strong>La section n'est pas un périmètre de droits</strong>
+            (Q18.3) : c'est un axe de rangement.
+        </p>
+
+        @if (_error is not null)
+        {
+            <p class="lx-denied" role="alert">@_error</p>
+        }
+
+        <div class="lx-cols">
+            @* --- Sections --- *@
+            <section class="lx-col">
+                <h2>Sections</h2>
+                <ul class="lx-list">
+                    @foreach (var s in _sections)
+                    {
+                        <li class="@(s.Id == _sectionId ? "lx-sel" : null)">
+                            <button type="button" class="lx-pick" @onclick="() => SelectSectionAsync(s.Id)">@s.Libelle</button>
+                            <button type="button" class="lx-del" title="Supprimer" @onclick="() => DeleteSectionAsync(s.Id)">✕</button>
+                        </li>
+                    }
+                </ul>
+                <div class="lx-add">
+                    <input placeholder="Nouvelle section" @bind="_newSection" @bind:event="oninput" />
+                    <button type="button" @onclick="AddSectionAsync" disabled="@(_busy || string.IsNullOrWhiteSpace(_newSection))">Ajouter</button>
+                </div>
+            </section>
+
+            @* --- Locaux --- *@
+            <section class="lx-col">
+                <h2>Locaux</h2>
+                @if (_sectionId is null)
+                {
+                    <p class="lx-hint"><em>Choisir une section.</em></p>
+                }
+                else
+                {
+                    <ul class="lx-list">
+                        @foreach (var l in _locaux)
+                        {
+                            <li class="@(l.Id == _localId ? "lx-sel" : null)">
+                                <button type="button" class="lx-pick" @onclick="() => SelectLocalAsync(l.Id)">@l.Libelle</button>
+                                <button type="button" class="lx-del" title="Supprimer" @onclick="() => DeleteLocalAsync(l.Id)">✕</button>
+                            </li>
+                        }
+                    </ul>
+                    <div class="lx-add">
+                        <input placeholder="Nouveau local" @bind="_newLocal" @bind:event="oninput" />
+                        <button type="button" @onclick="AddLocalAsync" disabled="@(_busy || string.IsNullOrWhiteSpace(_newLocal))">Ajouter</button>
+                    </div>
+                }
+            </section>
+
+            @* --- Contenants --- *@
+            <section class="lx-col">
+                <h2>Contenants</h2>
+                @if (_localId is null)
+                {
+                    <p class="lx-hint"><em>Choisir un local.</em></p>
+                }
+                else
+                {
+                    <ul class="lx-list">
+                        @foreach (var c in _contenants)
+                        {
+                            <li>
+                                <span class="lx-pick">@c.Libelle</span>
+                                <button type="button" class="lx-del" title="Supprimer" @onclick="() => DeleteContenantAsync(c.Id)">✕</button>
+                            </li>
+                        }
+                    </ul>
+                    <div class="lx-add">
+                        <input placeholder="Nouveau contenant" @bind="_newContenant" @bind:event="oninput" />
+                        <button type="button" @onclick="AddContenantAsync" disabled="@(_busy || string.IsNullOrWhiteSpace(_newContenant))">Ajouter</button>
+                    </div>
+                }
+            </section>
+        </div>
+    </Authorized>
+</AuthorizeView>

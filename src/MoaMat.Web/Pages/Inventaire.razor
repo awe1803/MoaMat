@@ -1,0 +1,145 @@
+@page "/inventaire"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using MoaMat.Web.Data
+@inject ItemService Items
+@inject LieuService Lieux
+
+<PageTitle>Inventaire — MoaMat</PageTitle>
+
+<h1>Inventaire</h1>
+
+<AuthorizeView Policy="@MoaMatRoles.Policies.LectureOrHigher">
+    <NotAuthorized>
+        <p class="inv-denied" role="alert">Accès réservé aux utilisateurs authentifiés.</p>
+    </NotAuthorized>
+    <Authorized>
+        <p class="inv-lead">
+            Vue unifiée du matériel (modèle <em>Item</em>). Les codes club douteux
+            (dupliqués ou non structurants) portent un badge
+            <span class="inv-badge inv-badge-ambigu">code ambigu</span> : ils sont
+            <strong>signalés, jamais renumérotés</strong>.
+        </p>
+
+        <div class="inv-filters">
+            <label>Famille
+                <select @bind="_filter.Famille" @bind:after="ReloadAsync">
+                    <option value="">Toutes</option>
+                    @foreach (var fam in Familles)
+                    {
+                        <option value="@fam.Code">@fam.Label</option>
+                    }
+                </select>
+            </label>
+
+            <label>Statut
+                <select @bind="_filter.StatutCode" @bind:after="ReloadAsync">
+                    <option value="">Tous</option>
+                    @foreach (var s in _statuts)
+                    {
+                        <option value="@s.Code">@s.Libelle</option>
+                    }
+                </select>
+            </label>
+
+            <label>Lieu
+                <select @bind="_lieuContenantId" @bind:after="ReloadAsync">
+                    <option value="">Tous</option>
+                    @foreach (var c in _contenants)
+                    {
+                        <option value="@c.ContenantId">@c.Chemin</option>
+                    }
+                </select>
+            </label>
+
+            <label>Échéance avant
+                <input type="date" @bind="_echeanceAvant" @bind:after="ReloadAsync" />
+            </label>
+
+            <label>État
+                <select @bind="_actif" @bind:after="ReloadAsync">
+                    <option value="actifs">Actifs</option>
+                    <option value="inactifs">Désactivés</option>
+                    <option value="tous">Tous</option>
+                </select>
+            </label>
+
+            <label class="inv-check">
+                <input type="checkbox" @bind="_filter.CodesAmbigusUniquement" @bind:after="ReloadAsync" />
+                Codes ambigus uniquement
+            </label>
+
+            <button type="button" @onclick="ReloadAsync" disabled="@_busy">Rafraîchir</button>
+        </div>
+
+        @if (_busy)
+        {
+            <p><em>Chargement…</em></p>
+        }
+        else if (_error is not null)
+        {
+            <p class="inv-denied" role="alert">@_error</p>
+        }
+        else if (_rows.Count == 0)
+        {
+            <p><em>Aucun item pour ces critères.</em></p>
+        }
+        else
+        {
+            <table class="table inv-table">
+                <thead>
+                    <tr>
+                        <th>Code club</th>
+                        <th>Famille</th>
+                        <th>Marque / modèle</th>
+                        <th>N° série</th>
+                        <th>Statut</th>
+                        <th>Lieu</th>
+                        <th>Échéance</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var it in _rows)
+                    {
+                        <tr class="@(it.Actif ? null : "inv-row-off")">
+                            <td>
+                                @(it.CodeClub ?? "—")
+                                @if (it.CodeClubAmbigu)
+                                {
+                                    <span class="inv-badge inv-badge-ambigu"
+                                          title="@AmbiguReason(it)">code ambigu</span>
+                                }
+                            </td>
+                            <td>@FamilleLabel(it.Famille)</td>
+                            <td>@Join(it.Marque, it.Modele)</td>
+                            <td>@(it.NumSerie ?? "—")</td>
+                            <td>
+                                <span class="@(it.StatutTerminal ? "inv-statut-term" : null)">
+                                    @(it.StatutLibelle ?? it.StatutCode)
+                                </span>
+                            </td>
+                            <td>@(it.LieuChemin ?? "—")</td>
+                            <td>@(it.DateEcheance?.ToString("yyyy-MM-dd") ?? "—")</td>
+                            <td>
+                                <AuthorizeView Policy="@MoaMatRoles.Policies.GestionOrHigher" Context="edit">
+                                    <button type="button" class="inv-toggle"
+                                            @onclick="() => ToggleActifAsync(it)" disabled="@_busy">
+                                        @(it.Actif ? "Désactiver" : "Réactiver")
+                                    </button>
+                                </AuthorizeView>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+            <p class="inv-count">
+                @_rows.Count item(s).
+                @{ var amb = _rows.Count(r => r.CodeClubAmbigu); }
+                @if (amb > 0)
+                {
+                    <text>@amb au code club ambigu.</text>
+                }
+            </p>
+        }
+    </Authorized>
+</AuthorizeView>
