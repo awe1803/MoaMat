@@ -1,0 +1,30 @@
+@page "/module/{Key}"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+
+<PageTitle>@(Module?.Title ?? "Module") — MoaMat</PageTitle>
+
+<a class="back-link" href="">
+    <Icon Name="back" Size="14" />
+    Retour au tableau de bord
+</a>
+
+@if (Module is null)
+{
+    <div class="placeholder">
+        <div class="ic"><Icon Name="grid" Size="24" /></div>
+        <h1>Module inconnu</h1>
+        <p>Aucun module ne porte l'identifiant « @Key ».</p>
+    </div>
+}
+else
+{
+    <div class="placeholder">
+        <div class="ic"><Icon Name="@Module.Icon" Size="24" /></div>
+        <h1>@Module.Title</h1>
+        <p>@Module.PlannedText</p>
+        @if (Module.PlannedTag is not null)
+        {
+            <span class="tag">@Module.PlannedTag</span>
+        }
+    </div>
+}

@@ -67,6 +67,43 @@ Access_Data/            Export CSV de l'ancienne base Access + doc de nommage
 Analyse/                Analyse fonctionnelle et plan de reprise
 ```
 
+## Interface — système visuel et thème sombre
+
+L'interface applique la maquette
+[`docs/maquette_gestion_materiel_MOANA.html`](docs/maquette_gestion_materiel_MOANA.html) :
+barre supérieure + rail de modules sur bureau, barre compacte + onglets bas
+(avec le bouton Scanner en pastille) sur mobile, le même balisage servant les
+deux — c'est une requête média qui tranche, jamais du C#.
+
+| Fichier | Rôle |
+| --- | --- |
+| `src/MoaMat.Web/wwwroot/css/app.css` | Jetons de design et système visuel commun |
+| `src/MoaMat.Web/Components/Icon.razor` | Jeu d'icônes SVG de la maquette, tracé en `currentColor` |
+| `src/MoaMat.Web/Navigation/AppModules.cs` | Catalogue des modules : rail, tuiles et écrans « à venir » |
+| `src/MoaMat.Web/Presentation/` | Culture, libellés de validité, horodatages, résumé du tableau de bord |
+
+**Le thème sombre suit l'appareil, et rien d'autre.** Pas de bascule, pas de
+préférence stockée, pas de classe posée sur le document : un seul bloc
+`@media (prefers-color-scheme: dark)` redéfinit **uniquement des variables**.
+Pour que ce soit suffisant, deux règles tiennent tout le reste :
+
+- un composant dont le *fond* est `--ink` écrit son texte en `var(--surface)`,
+  jamais en blanc — les deux jetons s'inversent ensemble, le contraste est donc
+  conservé dans les deux thèmes ;
+- même chose pour les fonds `--red` / `--amber` / `--green`, dont le texte
+  reprend le `--*-bg` correspondant.
+
+Conséquence : aucune règle de composant n'est dupliquée par thème, et une
+nouvelle vue est correcte en sombre du seul fait qu'elle utilise les jetons.
+Les icônes étant des SVG en `currentColor`, elles suivent sans variante.
+`index.html` complète le dispositif côté navigateur (`color-scheme` pour les
+contrôles natifs, deux `theme-color` pour la barre du navigateur mobile et de
+la PWA installée).
+
+> Bootstrap a été retiré : la maquette n'en utilise rien, et ses variables
+> `data-bs-theme` imposaient un second mécanisme de thème en concurrence avec
+> les jetons.
+
 ## Démarrage — application
 
 ```bash

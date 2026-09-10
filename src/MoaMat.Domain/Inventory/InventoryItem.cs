@@ -103,4 +103,36 @@ public sealed record InventoryItem
 
         return reasons.Count > 0 ? string.Join(", ", reasons) : "code ambigu";
     }
+
+    /// <summary>
+    /// How many days ahead a due date still counts as "coming up". Three months
+    /// is the lead time the club needs to group items into one campaign at the
+    /// inspection body rather than sending them one by one.
+    /// </summary>
+    public const int DueSoonHorizonInDays = 90;
+
+    /// <summary>
+    /// Reads the item against its next due date, as of <paramref name="today"/>.
+    /// </summary>
+    /// <param name="today">Reference day, normally the user's current date.</param>
+    /// <returns>
+    /// <see cref="DueStatus.Unknown"/> when no due date is recorded — the
+    /// absence of a date is never reported as validity.
+    /// </returns>
+    public DueStatus DueStatusOn(DateOnly today)
+    {
+        if (DueOn is not { } dueOn)
+        {
+            return DueStatus.Unknown;
+        }
+
+        if (dueOn < today)
+        {
+            return DueStatus.Overdue;
+        }
+
+        return dueOn <= today.AddDays(DueSoonHorizonInDays)
+            ? DueStatus.DueSoon
+            : DueStatus.Valid;
+    }
 }

@@ -1,24 +1,98 @@
-﻿@inherits LayoutComponentBase
-<div class="page">
-    <div class="sidebar">
-        <NavMenu />
-    </div>
+@inherits LayoutComponentBase
 
-    <main>
-        <div class="top-row px-4">
+<div class="app-shell">
+
+    @* ---------- Barre supérieure — bureau ---------- *@
+    <header class="topbar-desktop">
+        <a class="brand" href="">
+            <img src="logo_Royal_Moana.png" alt="Royal Moana" class="brand-logo" />
+            <span>
+                <span class="brand-name">MoaMat</span>
+                <span class="brand-sub">Gestion du matériel — Royal Moana</span>
+            </span>
+        </a>
+
+        <form class="searchbox" role="search" @onsubmit="Search" @onsubmit:preventDefault>
+            <Icon Name="search" Size="15" />
+            <input type="search" @bind="_query" @bind:event="oninput"
+                   placeholder="Rechercher un code club, un n° de série…"
+                   aria-label="Rechercher dans l'inventaire" />
+        </form>
+
+        <div class="topbar-actions">
+            <a class="icon-btn" href="@($"{AppModules.PlaceholderRoutePrefix}/scanner")" title="Scanner un objet">
+                <Icon Name="scan" Size="16" />
+            </a>
+            <a class="icon-btn" href="@OverdueHref" title="Échéances dépassées">
+                <Icon Name="bell" Size="16" />
+                <span class="dot-alert"></span>
+            </a>
             <AuthorizeView>
                 <Authorized>
-                    <span class="top-user">@context.User.Identity?.Name</span>
-                    <a href="deconnexion">Se déconnecter</a>
+                    <span class="avatar" title="@context.User.Identity?.Name">
+                        @UserInitials.FromDisplayName(context.User.Identity?.Name)
+                    </span>
+                    <a class="icon-btn" href="deconnexion" title="Se déconnecter">
+                        <Icon Name="logout" Size="16" />
+                    </a>
                 </Authorized>
                 <NotAuthorized>
-                    <a href="connexion">Se connecter</a>
+                    <a class="btn" href="connexion">Se connecter</a>
                 </NotAuthorized>
             </AuthorizeView>
         </div>
+    </header>
 
-        <article class="content px-4">
-            @Body
-        </article>
-    </main>
+    @* ---------- Barre supérieure — mobile ---------- *@
+    <header class="topbar-mobile">
+        <button type="button" class="icon-btn" @onclick="ToggleNav"
+                aria-expanded="@(_isNavOpen ? "true" : "false")" aria-controls="nav-principal"
+                title="Menu de navigation">
+            <Icon Name="menu" Size="16" />
+        </button>
+
+        <a class="brand" href="">
+            <img src="logo_Royal_Moana.png" alt="Royal Moana" class="brand-logo brand-logo-sm" />
+            <span class="brand-name">MoaMat</span>
+        </a>
+
+        <a class="icon-btn" href="@OverdueHref" title="Échéances dépassées">
+            <Icon Name="bell" Size="14" />
+            <span class="dot-alert"></span>
+        </a>
+    </header>
+
+    @* ---------- Corps : navigation + contenu ---------- *@
+    <div class="body-row">
+        <div class="nav-backdrop @(_isNavOpen ? "open" : null)" @onclick="CloseNav"></div>
+
+        <aside id="nav-principal" class="sidebar @(_isNavOpen ? "open" : null)">
+            <NavMenu />
+        </aside>
+
+        <main class="main-scroll">
+            <article class="content">
+                @Body
+            </article>
+        </main>
+    </div>
+
+    @* ---------- Barre inférieure — mobile ---------- *@
+    <nav class="bottomnav" aria-label="Navigation principale">
+        <NavLink class="nav-tab" href="" Match="NavLinkMatch.All">
+            <Icon Name="home" Size="20" /><span>Accueil</span>
+        </NavLink>
+        <NavLink class="nav-tab" href="inventaire">
+            <Icon Name="grid" Size="20" /><span>Inventaire</span>
+        </NavLink>
+        <NavLink class="nav-tab nav-tab-scan" href="@($"{AppModules.PlaceholderRoutePrefix}/scanner")">
+            <span class="scan-circle"><Icon Name="scan" Size="20" /></span><span>Scanner</span>
+        </NavLink>
+        <NavLink class="nav-tab" href="@OverdueHref">
+            <Icon Name="bell" Size="20" /><span>Alertes</span>
+        </NavLink>
+        <button type="button" class="nav-tab" @onclick="ToggleNav">
+            <Icon Name="more" Size="20" /><span>Plus</span>
+        </button>
+    </nav>
 </div>

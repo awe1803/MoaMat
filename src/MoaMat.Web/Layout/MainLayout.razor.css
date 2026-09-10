@@ -1,98 +1,229 @@
-/* Layout principal — chrome repris de la maquette MOANA */
+/* =============================================================================
+   Coquille applicative — reprise de la maquette MOANA.
 
-.page {
-    position: relative;
+   Le chrome bureau (barre supérieure + rail latéral) et le chrome mobile
+   (barre compacte + onglets bas + tiroir) coexistent dans le même balisage :
+   c'est la requête média qui tranche, jamais du C#. Toutes les couleurs
+   passent par les jetons de app.css, donc le thème sombre suit l'appareil.
+   ========================================================================== */
+
+.app-shell {
     display: flex;
     flex-direction: column;
-    min-height: 100vh;
-}
-
-main {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
+    min-height: 100dvh;
     background: var(--bg);
 }
 
-.sidebar {
-    background: var(--surface);
-    border-right: 1px solid var(--border);
-}
-
-.top-row {
-    display: flex;
+/* ---------------------------------------------------------------------------
+   Barre supérieure — bureau
+   ------------------------------------------------------------------------- */
+.topbar-desktop {
+    display: none;
     align-items: center;
-    justify-content: flex-end;
-    gap: 10px;
+    justify-content: space-between;
+    gap: 16px;
     height: 60px;
     padding: 0 24px;
     background: var(--surface);
     border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
 }
 
-    .top-row ::deep a,
-    .top-row ::deep .btn-link {
-        margin-left: 1.5rem;
-        white-space: nowrap;
-        text-decoration: none;
-        color: var(--ink-2);
-        font-size: 13px;
-    }
-
-    .top-row ::deep a:hover,
-    .top-row ::deep .btn-link:hover {
-        color: var(--ink);
-        text-decoration: underline;
-    }
-
-    .top-row ::deep a:first-child {
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-
-    .top-row ::deep .top-user {
-        font-size: 12px;
-        color: var(--ink-3);
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-
-@media (max-width: 640.98px) {
-    .top-row {
-        justify-content: space-between;
-        padding: 0 16px;
-    }
-
-        .top-row ::deep a,
-        .top-row ::deep .btn-link {
-            margin-left: 0;
-        }
+.topbar-desktop ::deep .brand,
+.topbar-mobile ::deep .brand {
+    color: inherit;
+    text-decoration: none;
 }
 
+.topbar-desktop ::deep .brand:hover,
+.topbar-mobile ::deep .brand:hover {
+    text-decoration: none;
+}
+
+.topbar-desktop ::deep .searchbox {
+    margin: 0;
+}
+
+.brand-logo {
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+    object-fit: contain;
+}
+
+.brand-logo-sm {
+    width: 30px;
+    height: 30px;
+}
+
+/* ---------------------------------------------------------------------------
+   Barre supérieure — mobile
+   ------------------------------------------------------------------------- */
+.topbar-mobile {
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 14px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+
+/* ---------------------------------------------------------------------------
+   Corps
+   ------------------------------------------------------------------------- */
+.body-row {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+}
+
+.sidebar {
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    width: 216px;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+}
+
+.main-scroll {
+    flex: 1;
+    min-width: 0;
+    background: var(--bg);
+}
+
+.nav-backdrop {
+    display: none;
+}
+
+/* ---------------------------------------------------------------------------
+   Onglets bas — mobile
+   ------------------------------------------------------------------------- */
+.bottomnav {
+    display: none;
+    justify-content: space-around;
+    align-items: flex-end;
+    gap: 4px;
+    padding: 8px 10px calc(12px + env(safe-area-inset-bottom, 0px));
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+}
+
+.bottomnav ::deep .nav-tab {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    padding: 4px 6px;
+    background: none;
+    border: none;
+    border-radius: 8px;
+    color: var(--ink-3);
+    font-size: 10px;
+    text-decoration: none;
+}
+
+.bottomnav ::deep .nav-tab:hover {
+    color: var(--ink-2);
+    text-decoration: none;
+}
+
+.bottomnav ::deep .nav-tab.active {
+    color: var(--teal-dark);
+}
+
+.bottomnav ::deep .nav-tab-scan {
+    position: relative;
+    top: -14px;
+}
+
+.bottomnav ::deep .scan-circle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: var(--ink);
+    color: var(--surface);
+    box-shadow: var(--shadow-md);
+}
+
+.bottomnav ::deep .nav-tab-scan span:last-child {
+    margin-top: 4px;
+    color: var(--ink-2);
+}
+
+/* ---------------------------------------------------------------------------
+   Bureau — à partir de 641 px
+   ------------------------------------------------------------------------- */
 @media (min-width: 641px) {
-    .page {
-        flex-direction: row;
+    .topbar-desktop {
+        display: flex;
+        position: sticky;
+        top: 0;
+        z-index: 20;
     }
 
     .sidebar {
-        width: 216px;
-        height: 100vh;
+        position: sticky;
+        top: 60px;
+        height: calc(100dvh - 60px);
+        overflow-y: auto;
+    }
+}
+
+/* ---------------------------------------------------------------------------
+   Mobile — jusqu'à 640 px : tiroir de navigation et onglets bas
+   ------------------------------------------------------------------------- */
+@media (max-width: 640.98px) {
+    .topbar-mobile {
+        display: flex;
         position: sticky;
         top: 0;
-        flex-shrink: 0;
+        z-index: 20;
     }
 
-    .top-row {
+    .bottomnav {
+        display: flex;
         position: sticky;
-        top: 0;
-        z-index: 1;
+        bottom: 0;
+        z-index: 20;
     }
 
-        .top-row.auth ::deep a:first-child {
-            flex: 1;
-            text-align: right;
-            width: 0;
-        }
+    .sidebar {
+        position: fixed;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        z-index: 40;
+        width: 262px;
+        max-width: 84vw;
+        overflow-y: auto;
+        box-shadow: var(--shadow-md);
+        transform: translateX(-100%);
+        transition: transform .18s ease;
+    }
+
+    .sidebar.open {
+        transform: translateX(0);
+    }
+
+    .nav-backdrop.open {
+        display: block;
+        position: fixed;
+        inset: 0;
+        z-index: 30;
+        background: rgba(6, 20, 27, .45);
+    }
+}
+
+/* Respecte le réglage système « réduire les animations ». */
+@media (prefers-reduced-motion: reduce) {
+    .sidebar {
+        transition: none;
+    }
 }

@@ -1,56 +1,49 @@
-<div class="top-row ps-3 navbar navbar-dark">
-    <div class="container-fluid">
-        <a class="navbar-brand" href="">MoaMat</a>
-        <button title="Menu de navigation" class="navbar-toggler" @onclick="ToggleNavMenu">
-            <span class="navbar-toggler-icon"></span>
-        </button>
+
+<nav class="side-nav" aria-label="Modules">
+    <div class="side-brand">
+        <img src="logo_Royal_Moana.png" alt="Royal Moana" />
+        <span>
+            <span class="brand-name">Royal Moana</span>
+            <span class="brand-sub">Gestion du matériel</span>
+        </span>
     </div>
-</div>
 
-<div class="@NavMenuCssClass nav-scrollable" @onclick="ToggleNavMenu">
-    <nav class="nav flex-column">
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Accueil
+    <NavLink class="side-item" href="" Match="NavLinkMatch.All">
+        <Icon Name="dashboard" Size="16" />
+        <span>Tableau de bord</span>
+    </NavLink>
+
+    @foreach (var group in VisibleGroups)
+    {
+        <div class="side-group-label">@group</div>
+
+        @foreach (var module in VisibleModulesIn(group))
+        {
+            <NavLink class="side-item" href="@module.Href">
+                <Icon Name="@module.Icon" Size="16" />
+                <span>@module.Title</span>
+                @if (!module.IsAvailable)
+                {
+                    <span class="side-count" title="Écran à venir">à venir</span>
+                }
             </NavLink>
-        </div>
-        <AuthorizeView Policy="@AuthorizationPolicyNames.ReaderOrHigher">
-            <div class="nav-item px-3">
-                <NavLink class="nav-link" href="inventaire">
-                    <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Inventaire
-                </NavLink>
-            </div>
-        </AuthorizeView>
-        <AuthorizeView Policy="@AuthorizationPolicyNames.AdministratorOrHigher">
-            <div class="nav-item px-3">
-                <NavLink class="nav-link" href="lieux">
-                    <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Lieux
-                </NavLink>
-            </div>
-            <div class="nav-item px-3">
-                <NavLink class="nav-link" href="comptes">
-                    <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Comptes
-                </NavLink>
-            </div>
-            <div class="nav-item px-3">
-                <NavLink class="nav-link" href="journal-audit">
-                    <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Journal d'audit
-                </NavLink>
-            </div>
-        </AuthorizeView>
-    </nav>
+        }
+    }
+</nav>
 
-    <AuthorizeView>
-        <div class="nav-user">
-            <div class="nav-user-id">
-                <span class="nav-user-avatar">
-                    @UserInitials.FromDisplayName(context.User.Identity?.Name)
-                </span>
-                <span class="nav-user-email" title="@context.User.Identity?.Name">
-                    @context.User.Identity?.Name
-                </span>
-            </div>
-            <a class="nav-user-signout" href="deconnexion">Se déconnecter</a>
+<AuthorizeView>
+    <div class="side-user">
+        <div class="side-user-id">
+            <span class="avatar avatar-sm">
+                @UserInitials.FromDisplayName(context.User.Identity?.Name)
+            </span>
+            <span class="side-user-email" title="@context.User.Identity?.Name">
+                @context.User.Identity?.Name
+            </span>
         </div>
-    </AuthorizeView>
-</div>
+        <a class="side-user-signout" href="deconnexion">
+            <Icon Name="logout" Size="14" />
+            <span>Se déconnecter</span>
+        </a>
+    </div>
+</AuthorizeView>

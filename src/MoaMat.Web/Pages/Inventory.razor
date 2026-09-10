@@ -1,142 +1,169 @@
 @page "/inventaire"
 @attribute [Microsoft.AspNetCore.Authorization.Authorize]
 
-<PageTitle>Inventaire — MoaMat</PageTitle>
-
-<h1>Inventaire</h1>
+<PageTitle>@PageHeading — MoaMat</PageTitle>
 
 <AuthorizeView Policy="@AuthorizationPolicyNames.ReaderOrHigher">
     <NotAuthorized>
-        <p class="inv-denied" role="alert">Accès réservé aux utilisateurs authentifiés.</p>
+        <div class="page-head"><h1>Inventaire</h1></div>
+        <p class="msg-error" role="alert">Accès réservé aux utilisateurs authentifiés.</p>
     </NotAuthorized>
     <Authorized>
-        <p class="inv-lead">
-            Vue unifiée du matériel (modèle <em>Item</em>). Les codes club douteux
-            (dupliqués ou non structurants) portent un badge
-            <span class="inv-badge inv-badge-ambigu">code ambigu</span> : ils sont
-            <strong>signalés, jamais renumérotés</strong>.
-        </p>
+        @if (Family is not null)
+        {
+            <a class="back-link" href="inventaire">
+                <Icon Name="back" Size="14" />
+                Tout l'inventaire
+            </a>
+        }
 
-        <div class="inv-filters">
-            <label>Famille
-                <select @bind="_familyCode" @bind:after="ReloadAsync">
-                    <option value="">Toutes</option>
-                    @foreach (var family in ItemFamily.All)
-                    {
-                        <option value="@family.Code">@family.DisplayName</option>
-                    }
-                </select>
-            </label>
-
-            <label>Statut
-                <select @bind="_statusCode" @bind:after="ReloadAsync">
-                    <option value="">Tous</option>
-                    @foreach (var status in _statuses)
-                    {
-                        <option value="@status.Code">@status.Label</option>
-                    }
-                </select>
-            </label>
-
-            <label>Lieu
-                <select @bind="_containerId" @bind:after="ReloadAsync">
-                    <option value="">Tous</option>
-                    @foreach (var container in _containers)
-                    {
-                        <option value="@container.ContainerId">@container.FullPath</option>
-                    }
-                </select>
-            </label>
-
-            <label>Échéance avant
-                <input type="date" @bind="_dueOnOrBefore" @bind:after="ReloadAsync" />
-            </label>
-
-            <label>État
-                <select @bind="_activation" @bind:after="ReloadAsync">
-                    <option value="@ActivationScope.ActiveOnly">Actifs</option>
-                    <option value="@ActivationScope.InactiveOnly">Désactivés</option>
-                    <option value="@ActivationScope.All">Tous</option>
-                </select>
-            </label>
-
-            <label class="inv-check">
-                <input type="checkbox" @bind="_ambiguousCodesOnly" @bind:after="ReloadAsync" />
-                Codes ambigus uniquement
-            </label>
-
-            <button type="button" @onclick="ReloadAsync" disabled="@_isBusy">Rafraîchir</button>
+        <div class="page-head">
+            <h1>@PageHeading</h1>
+            <div class="sub">
+                @VisibleItems.Count item(s) affiché(s).
+                Les codes club douteux portent un badge <span class="badge ambigu">code ambigu</span> :
+                ils sont signalés, jamais renumérotés.
+            </div>
         </div>
+
+        <div class="toolbar">
+            <div class="searchbox full">
+                <Icon Name="search" Size="15" />
+                <input type="search" value="@Search" @onchange="OnSearchInput"
+                       placeholder="Code club, n° de série, marque, lieu…"
+                       aria-label="Rechercher dans la liste" />
+            </div>
+            <button type="button" class="btn" @onclick="ReloadAsync" disabled="@_isBusy">
+                <Icon Name="refresh" Size="14" />
+                Rafraîchir
+            </button>
+        </div>
+
+        @* Le sélecteur de familles n'a de sens que sur l'inventaire complet.
+           Ouvert sur une famille depuis le menu, l'écran ne montre que ses
+           propres filtres, comme les maquettes « Bouteilles » / « Détendeurs ». *@
+        @if (Family is null)
+        {
+            <div class="chip-row" role="group" aria-label="Familles">
+                <a class="chip active" href="inventaire">Toutes familles</a>
+                @foreach (var family in ItemFamily.All)
+                {
+                    <a class="chip" href="@AppModules.InventoryHref(family.Code)">@family.DisplayName</a>
+                }
+            </div>
+        }
+
+        <div class="chip-row" role="group" aria-label="Validité">
+            <button type="button" class="chip @(Due is null ? "active" : null)"
+                    @onclick="@(() => Go("echeance", null))">
+                Toutes (@CountFor(null))
+            </button>
+            <button type="button" class="chip @(Due == DueFilterOverdue ? "active" : null)"
+                    @onclick="@(() => Go("echeance", DueFilterOverdue))">
+                Hors validité (@CountFor(DueFilterOverdue))
+            </button>
+            <button type="button" class="chip @(Due == DueFilterSoon ? "active" : null)"
+                    @onclick="@(() => Go("echeance", DueFilterSoon))">
+                Échéance proche (@CountFor(DueFilterSoon))
+            </button>
+            <button type="button" class="chip @(Due == DueFilterValid ? "active" : null)"
+                    @onclick="@(() => Go("echeance", DueFilterValid))">
+                Valides (@CountFor(DueFilterValid))
+            </button>
+        </div>
+
+        @if (Family is null)
+        {
+        <details class="filters">
+            <summary>Filtres avancés</summary>
+            <div class="filters-row">
+                <label class="field">
+                    <span>Statut</span>
+                    <select @bind="_statusCode" @bind:after="ReloadAsync">
+                        <option value="">Tous</option>
+                        @foreach (var status in _statuses)
+                        {
+                            <option value="@status.Code">@status.Label</option>
+                        }
+                    </select>
+                </label>
+
+                <label class="field">
+                    <span>Lieu</span>
+                    <select @bind="_containerId" @bind:after="ReloadAsync">
+                        <option value="">Tous</option>
+                        @foreach (var container in _containers)
+                        {
+                            <option value="@container.ContainerId">@container.FullPath</option>
+                        }
+                    </select>
+                </label>
+
+                <label class="field">
+                    <span>État</span>
+                    <select @bind="_activation" @bind:after="ReloadAsync">
+                        <option value="@ActivationScope.ActiveOnly">Actifs</option>
+                        <option value="@ActivationScope.InactiveOnly">Désactivés</option>
+                        <option value="@ActivationScope.All">Tous</option>
+                    </select>
+                </label>
+
+                <label class="field field-check">
+                    <input type="checkbox" @bind="_ambiguousCodesOnly" @bind:after="ReloadAsync" />
+                    <span>Codes ambigus uniquement</span>
+                </label>
+            </div>
+        </details>
+        }
 
         @if (_error is not null)
         {
-            <p class="inv-denied" role="alert">@_error</p>
+            <p class="msg-error" role="alert">@_error</p>
         }
 
         @if (_isBusy)
         {
-            <p><em>Chargement…</em></p>
+            <p class="msg-muted">Chargement de l'inventaire…</p>
         }
-        else if (_items.Count == 0)
+        else if (VisibleItems.Count == 0)
         {
-            <p><em>Aucun item pour ces critères.</em></p>
+            <div class="data-list">
+                <p class="data-empty">Aucun item pour ces critères.</p>
+            </div>
         }
         else
         {
-            <table class="table inv-table">
-                <thead>
-                    <tr>
-                        <th>Code club</th>
-                        <th>Famille</th>
-                        <th>Marque / modèle</th>
-                        <th>N° série</th>
-                        <th>Statut</th>
-                        <th>Lieu</th>
-                        <th>Échéance</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var item in _items)
-                    {
-                        <tr class="@(item.IsActive ? null : "inv-row-off")">
-                            <td>
-                                @(item.ClubCode ?? "—")
-                                @if (item.HasAmbiguousClubCode)
-                                {
-                                    <span class="inv-badge inv-badge-ambigu"
-                                          title="@item.DescribeClubCodeAmbiguity()">code ambigu</span>
-                                }
-                            </td>
-                            <td>@ItemFamily.DisplayNameFor(item.FamilyCode)</td>
-                            <td>@DescribeModel(item)</td>
-                            <td>@(item.SerialNumber ?? "—")</td>
-                            <td>
-                                <span class="@(item.IsStatusTerminal ? "inv-statut-term" : null)">
-                                    @(item.StatusLabel ?? item.StatusCode)
-                                </span>
-                            </td>
-                            <td>@(item.LocationPath ?? "—")</td>
-                            <td>@(item.DueOn?.ToString("yyyy-MM-dd") ?? "—")</td>
-                            <td>
-                                <AuthorizeView Policy="@AuthorizationPolicyNames.ManagerOrHigher" Context="edit">
-                                    <button type="button" class="inv-toggle"
-                                            @onclick="() => ToggleActivationAsync(item)" disabled="@_isBusy">
-                                        @(item.IsActive ? "Désactiver" : "Réactiver")
-                                    </button>
-                                </AuthorizeView>
-                            </td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-            <p class="inv-count">
-                @_items.Count item(s).
-                @if (AmbiguousCount > 0)
+            <div class="data-list">
+                @foreach (var item in VisibleItems)
                 {
-                    <text>@AmbiguousCount au code club ambigu.</text>
+                    var status = item.DueStatusOn(Today);
+                    <div class="data-row @(item.IsActive ? null : "data-row-off")">
+                        <span class="dr-code">
+                            @(item.ClubCode ?? "—")
+                            @if (item.HasAmbiguousClubCode)
+                            {
+                                <span class="badge ambigu" title="@item.DescribeClubCodeAmbiguity()">code ambigu</span>
+                            }
+                        </span>
+                        <div class="dr-info">
+                            <div class="dr-title">@DescribeModel(item)</div>
+                            <div class="dr-sub">@DescribeContext(item)</div>
+                        </div>
+                        <span class="dr-status @(item.IsStatusTerminal ? "terminal" : null)">
+                            @(item.StatusLabel ?? item.StatusCode)
+                        </span>
+                        <span class="dr-date">@FormatDue(item.DueOn)</span>
+                        <span class="@DueStatusView.BadgeClass(status)">@DueStatusView.Label(status)</span>
+                        <AuthorizeView Policy="@AuthorizationPolicyNames.ManagerOrHigher" Context="edit">
+                            <button type="button" class="btn btn-sm"
+                                    @onclick="() => ToggleActivationAsync(item)" disabled="@_isBusy">
+                                @(item.IsActive ? "Désactiver" : "Réactiver")
+                            </button>
+                        </AuthorizeView>
+                    </div>
                 }
-            </p>
+            </div>
         }
     </Authorized>
 </AuthorizeView>
+

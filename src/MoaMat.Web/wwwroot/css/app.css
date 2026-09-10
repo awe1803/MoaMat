@@ -1,10 +1,10 @@
 /* =============================================================================
    MoaMat — feuille de style principale
-   Système visuel repris de Analyse/maquette_gestion_materiel_MOANA.html
+   Système visuel repris de docs/maquette_gestion_materiel_MOANA.html
    ========================================================================== */
 
 /* ---------------------------------------------------------------------------
-   Jetons de design
+   Jetons de design — thème clair
    ------------------------------------------------------------------------- */
 :root {
     /* Laisse les contrôles natifs (formulaires, barres de défilement, etc.)
@@ -28,10 +28,15 @@
 
     --red: #B23A2E;
     --red-bg: #FBEAE8;
+    --red-border: #F2C9C3;
+
     --amber: #B9770E;
     --amber-bg: #FDF3E2;
+    --amber-border: #F0DDB4;
+
     --green: #2F7A55;
     --green-bg: #E8F4EE;
+    --green-border: #C3E2D0;
 
     --radius: 10px;
     --radius-lg: 16px;
@@ -44,13 +49,16 @@
 }
 
 /* ---------------------------------------------------------------------------
-   Mode sombre — suit automatiquement le réglage du système d'exploitation
+   Mode sombre — suit automatiquement le réglage de l'appareil
    (prefers-color-scheme). Aucun sélecteur, aucun bouton : rien à activer,
-   l'app bascule quand la machine passe en thème sombre.
+   l'application bascule quand la machine passe en thème sombre.
 
-   Principe : on se contente de redéfinir les jetons de design. Les rares
-   composants qui utilisaient --ink comme *fond* (et non comme couleur de
-   texte) sont réoutillés juste après, car --ink devient clair ici.
+   Ce bloc ne redéfinit que des jetons : aucune règle de composant n'a besoin
+   d'être dupliquée par thème. Pour que ce soit possible, les composants qui
+   utilisent --ink comme *fond* écrivent leur texte en var(--surface) plutôt
+   qu'en blanc : les deux jetons s'inversent ensemble, donc le contraste est
+   conservé dans les deux thèmes. Même logique pour les fonds --red / --amber /
+   --green, dont le texte est écrit dans le --*-bg correspondant.
    ------------------------------------------------------------------------- */
 @media (prefers-color-scheme: dark) {
     :root {
@@ -71,57 +79,18 @@
 
         --red: #E98C81;
         --red-bg: #3B211E;
+        --red-border: #5A322C;
+
         --amber: #DAA24E;
         --amber-bg: #392C19;
+        --amber-border: #4E3B20;
+
         --green: #63BE8E;
         --green-bg: #17321F;
+        --green-border: #23492F;
 
         --shadow-sm: 0 1px 3px rgba(0, 0, 0, .4);
         --shadow-md: 0 4px 12px rgba(0, 0, 0, .5);
-    }
-
-    /* --ink servait de fond foncé sous un texte blanc : en sombre il est
-       clair, on bascule donc ces éléments sur le teal. */
-    .brand-mark,
-    .chip.active,
-    .btn.primary,
-    .tile-badge.new,
-    .auth-btn {
-        background: var(--teal-dark);
-        border-color: var(--teal-dark);
-        color: #06232A;
-    }
-
-    .btn.primary:hover,
-    .auth-btn:hover:not(:disabled) {
-        background: var(--teal);
-    }
-
-    .auth-spinner {
-        border-color: rgba(6, 35, 42, .35);
-        border-top-color: #06232A;
-    }
-
-    /* Bandeaux et messages : les couleurs de texte/bordure figées (marron,
-       vert foncé, rose) deviennent illisibles sur fond sombre. */
-    .alert-banner,
-    .alert-banner .txt,
-    .auth-msg.error,
-    .auth-msg.success {
-        border-color: var(--border);
-    }
-
-    .alert-banner .txt,
-    .auth-msg.error {
-        color: var(--red);
-    }
-
-    .auth-msg.success {
-        color: var(--green);
-    }
-
-    .alert-banner button {
-        color: #3B211E;
     }
 }
 
@@ -155,9 +124,9 @@ h1, h2, h3, h4 {
     line-height: 1.25;
 }
 
-h1 { font-size: 21px; }
-h2 { font-size: 19px; }
-h3 { font-size: 15px; }
+h1 { font-size: 19px; }
+h2 { font-size: 15px; }
+h3 { font-size: 14px; }
 
 h1:focus {
     outline: none;
@@ -167,12 +136,12 @@ p {
     margin: 0;
 }
 
-a, .btn-link {
+a {
     color: var(--teal-dark);
     text-decoration: none;
 }
 
-a:hover, .btn-link:hover {
+a:hover {
     text-decoration: underline;
 }
 
@@ -181,9 +150,16 @@ button {
     cursor: pointer;
 }
 
+button:disabled {
+    cursor: not-allowed;
+    opacity: .55;
+}
+
 code {
     font-family: var(--font-mono);
+    font-size: .92em;
     color: var(--teal-dark);
+    overflow-wrap: anywhere;
 }
 
 :focus-visible {
@@ -206,7 +182,7 @@ code {
 }
 
 /* ---------------------------------------------------------------------------
-   Coquille applicative
+   Contenu de page
    ------------------------------------------------------------------------- */
 .content {
     padding: 24px 32px 60px;
@@ -214,38 +190,46 @@ code {
 
 @media (max-width: 640.98px) {
     .content {
-        padding: 16px 14px 90px;
+        padding: 16px 14px 24px;
     }
 }
 
 /* ---------------------------------------------------------------------------
-   Barre supérieure (bureau)
+   Marque, recherche, actions de la barre supérieure
    ------------------------------------------------------------------------- */
 .brand {
     display: flex;
     align-items: center;
     gap: 10px;
+    min-width: 0;
 }
 
 .brand-mark {
-    width: 30px;
-    height: 30px;
-    border-radius: 8px;
-    background: var(--ink);
-    color: #fff;
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    background: var(--ink);
+    color: var(--surface);
+}
+
+.brand-mark-sm {
+    width: 26px;
+    height: 26px;
 }
 
 .brand-name {
+    display: block;
     font-size: 14px;
     font-weight: 600;
     line-height: 1.2;
 }
 
 .brand-sub {
+    display: block;
     font-size: 11px;
     color: var(--ink-3);
 }
@@ -263,14 +247,29 @@ code {
     color: var(--ink-3);
 }
 
-.searchbox.full {
-    width: 100%;
-    max-width: 320px;
+.searchbox:focus-within {
+    border-color: var(--teal);
 }
 
+/* Le champ ayant son propre anneau désactivé, c'est le cadre qui le porte —
+   et seulement pour un focus clavier. */
+.searchbox:has(input:focus-visible) {
+    outline: 2px solid var(--teal);
+    outline-offset: 1px;
+}
+
+.searchbox.full {
+    width: 100%;
+    max-width: 340px;
+}
+
+/* Le champ n'a pas de cadre propre : c'est .searchbox qui porte le fond, la
+   bordure et l'état de focus, l'icône et la saisie ne formant qu'un contrôle. */
 .searchbox input {
     width: 100%;
+    padding: 0;
     border: none;
+    border-radius: 0;
     background: transparent;
     outline: none;
     font-family: inherit;
@@ -286,19 +285,22 @@ code {
 
 .icon-btn {
     position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
     width: 34px;
     height: 34px;
     border-radius: 8px;
     border: 1px solid var(--border);
     background: var(--surface);
     color: var(--ink-2);
-    display: flex;
-    align-items: center;
-    justify-content: center;
 }
 
 .icon-btn:hover {
     background: var(--surface-2);
+    color: var(--ink);
+    text-decoration: none;
 }
 
 .dot-alert {
@@ -313,6 +315,10 @@ code {
 }
 
 .avatar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
     width: 32px;
     height: 32px;
     border-radius: 50%;
@@ -320,9 +326,13 @@ code {
     color: var(--teal-dark);
     font-size: 12px;
     font-weight: 600;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    text-transform: uppercase;
+}
+
+.avatar-sm {
+    width: 26px;
+    height: 26px;
+    font-size: 11px;
 }
 
 /* ---------------------------------------------------------------------------
@@ -332,14 +342,49 @@ code {
     margin-bottom: 18px;
 }
 
-.page-head h2 {
-    font-size: 19px;
-}
-
 .page-head .sub {
-    margin-top: 3px;
+    max-width: 90ch;
+    margin-top: 4px;
     font-size: 13px;
     color: var(--ink-2);
+}
+
+/* ---------------------------------------------------------------------------
+   Messages
+   ------------------------------------------------------------------------- */
+.msg-error,
+.msg-success,
+.msg-info {
+    max-width: 90ch;
+    margin-bottom: 16px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: 12.5px;
+    line-height: 1.45;
+}
+
+.msg-error {
+    background: var(--red-bg);
+    border: 1px solid var(--red-border);
+    color: var(--red);
+}
+
+.msg-success {
+    background: var(--green-bg);
+    border: 1px solid var(--green-border);
+    color: var(--green);
+}
+
+.msg-info {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--ink-2);
+}
+
+.msg-muted {
+    margin: 12px 0;
+    font-size: 13px;
+    color: var(--ink-3);
 }
 
 /* ---------------------------------------------------------------------------
@@ -352,36 +397,44 @@ code {
     margin-bottom: 18px;
     padding: 14px 16px;
     background: var(--red-bg);
-    border: 1px solid #F2C9C3;
+    border: 1px solid var(--red-border);
     border-radius: var(--radius);
+    color: var(--red);
 }
 
 .alert-banner svg {
     flex-shrink: 0;
     margin-top: 1px;
-    color: var(--red);
 }
 
 .alert-banner .txt {
     flex: 1;
     font-size: 13px;
     line-height: 1.5;
-    color: #7A2820;
 }
 
 .alert-banner .txt b {
     font-weight: 600;
 }
 
-.alert-banner button {
-    white-space: nowrap;
+.alert-action {
+    flex-shrink: 0;
     padding: 7px 12px;
     background: var(--red);
-    color: #fff;
+    /* Le texte reprend le fond du bandeau : les deux jetons s'inversent
+       ensemble, donc le bouton reste lisible en clair comme en sombre. */
+    color: var(--red-bg);
     border: none;
     border-radius: 7px;
     font-size: 12px;
     font-weight: 500;
+    white-space: nowrap;
+}
+
+.alert-action:hover {
+    color: var(--red-bg);
+    opacity: .9;
+    text-decoration: none;
 }
 
 /* ---------------------------------------------------------------------------
@@ -436,6 +489,7 @@ code {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 12px;
     margin: 26px 0 12px;
     font-size: 14px;
     font-weight: 600;
@@ -472,19 +526,22 @@ code {
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
+    color: var(--ink);
 }
 
 .tile:hover {
     border-color: var(--border-strong);
+    box-shadow: var(--shadow-sm);
+    text-decoration: none;
 }
 
 .tile-icon {
-    width: 36px;
-    height: 36px;
-    border-radius: 9px;
     display: flex;
     align-items: center;
     justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 9px;
 }
 
 .tile-icon.c-teal { background: var(--teal-light); color: var(--teal-dark); }
@@ -513,7 +570,7 @@ code {
 
 .tile-badge.red { background: var(--red-bg); color: var(--red); }
 .tile-badge.amber { background: var(--amber-bg); color: var(--amber); }
-.tile-badge.new { background: var(--ink); color: #fff; }
+.tile-badge.new { background: var(--ink); color: var(--surface); }
 
 /* ---------------------------------------------------------------------------
    Aperçu de liste
@@ -532,23 +589,35 @@ code {
     padding: 11px 14px;
     border-bottom: 1px solid var(--border);
     font-size: 13px;
+    color: var(--ink);
 }
 
 .lp-row:last-child {
     border-bottom: none;
 }
 
+.lp-row:hover {
+    background: var(--surface-2);
+    text-decoration: none;
+}
+
 .lp-code {
-    width: 90px;
+    width: 110px;
     flex-shrink: 0;
     font-family: var(--font-mono);
     font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .lp-mid {
     flex: 1;
     min-width: 0;
+    overflow: hidden;
     color: var(--ink-2);
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .lp-date {
@@ -562,6 +631,8 @@ code {
    Badges de statut
    ------------------------------------------------------------------------- */
 .badge {
+    font-family: var(--font-sans);
+    display: inline-block;
     flex-shrink: 0;
     padding: 3px 9px;
     border-radius: 999px;
@@ -573,12 +644,17 @@ code {
 .badge.valide { background: var(--green-bg); color: var(--green); }
 .badge.proche { background: var(--amber-bg); color: var(--amber); }
 .badge.expire { background: var(--red-bg); color: var(--red); }
+.badge.neutre { background: var(--surface-2); color: var(--ink-3); }
+.badge.ambigu { background: var(--amber-bg); color: var(--amber); }
+.badge.on { background: var(--green-bg); color: var(--green); }
+.badge.off { background: var(--surface-2); color: var(--ink-2); }
 
 /* ---------------------------------------------------------------------------
-   Écrans de liste (barre d'outils, filtres, tableau)
+   Écrans de liste : barre d'outils, filtres, lignes
    ------------------------------------------------------------------------- */
 .toolbar {
     display: flex;
+    align-items: center;
     gap: 10px;
     margin-bottom: 14px;
     flex-wrap: wrap;
@@ -587,23 +663,32 @@ code {
 .chip-row {
     display: flex;
     gap: 8px;
-    margin-bottom: 16px;
+    margin-bottom: 12px;
     flex-wrap: wrap;
 }
 
 .chip {
+    display: inline-flex;
+    align-items: center;
     padding: 6px 12px;
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 999px;
     color: var(--ink-2);
+    font-family: inherit;
     font-size: 12px;
+}
+
+.chip:hover {
+    border-color: var(--border-strong);
+    color: var(--ink);
+    text-decoration: none;
 }
 
 .chip.active {
     background: var(--ink);
     border-color: var(--ink);
-    color: #fff;
+    color: var(--surface);
 }
 
 .back-link {
@@ -620,6 +705,7 @@ code {
 
 .back-link:hover {
     color: var(--ink);
+    text-decoration: none;
 }
 
 .data-list {
@@ -645,8 +731,23 @@ code {
     background: var(--surface-2);
 }
 
+.data-row-off {
+    opacity: .55;
+}
+
+.data-empty {
+    padding: 30px 20px;
+    text-align: center;
+    font-size: 13px;
+    color: var(--ink-3);
+}
+
 .dr-code {
-    width: 96px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    width: 150px;
     flex-shrink: 0;
     font-family: var(--font-mono);
     font-weight: 600;
@@ -669,16 +770,196 @@ code {
     color: var(--ink-3);
 }
 
+.dr-status {
+    width: 110px;
+    flex-shrink: 0;
+    font-size: 12px;
+    color: var(--ink-2);
+}
+
+.dr-status.terminal {
+    color: var(--red);
+    font-weight: 600;
+}
+
 .dr-date {
-    width: 90px;
+    width: 78px;
     flex-shrink: 0;
     text-align: right;
+    font-family: var(--font-mono);
     font-size: 12px;
     color: var(--ink-2);
 }
 
 .dr-chev {
     flex-shrink: 0;
+    color: var(--ink-3);
+}
+
+/* Sur mobile, une ligne se replie en carte : les colonnes fixes ne tiennent
+   pas sur 390 px et tronqueraient le code club, qui est l'information clé. */
+@media (max-width: 640.98px) {
+    .data-row {
+        align-items: flex-start;
+        flex-wrap: wrap;
+        gap: 6px 10px;
+    }
+
+    .dr-code,
+    .dr-status,
+    .dr-date {
+        width: auto;
+        text-align: left;
+    }
+
+    .dr-info {
+        flex-basis: 100%;
+        order: 3;
+    }
+}
+
+/* ---------------------------------------------------------------------------
+   Formulaires
+   ------------------------------------------------------------------------- */
+.filters {
+    margin-bottom: 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+}
+
+.filters > summary {
+    padding: 10px 14px;
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--ink-2);
+    cursor: pointer;
+}
+
+.filters[open] > summary {
+    border-bottom: 1px solid var(--border);
+}
+
+.filters-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 12px 18px;
+    padding: 14px;
+    flex-wrap: wrap;
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+    font-size: 12px;
+    color: var(--ink-2);
+}
+
+.field-check {
+    flex-direction: row;
+    align-items: center;
+    gap: 7px;
+    padding-bottom: 8px;
+}
+
+/* Tout champ de saisie textuel, y compris un <input> sans attribut type —
+   c'est ce que rend un <InputText> auquel on n'en passe pas, et une liste de
+   types explicite le laisserait sans style. Le :where() garde la spécificité
+   à celle du seul sélecteur d'élément, pour qu'une règle de composant comme
+   « .searchbox input » suffise à reprendre la main. */
+input:where([type=text], [type=email], [type=password], [type=search],
+            [type=date], [type=number], [type=tel], [type=url], :not([type])),
+select,
+textarea {
+    padding: 8px 10px;
+    max-width: 100%;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--ink);
+    font-family: inherit;
+    font-size: 13px;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+    border-color: var(--teal);
+}
+
+/* L'anneau de focus n'est retiré qu'au clic : au clavier il reste visible,
+   c'est le seul repère de position dans un formulaire. */
+input:focus:not(:focus-visible),
+select:focus:not(:focus-visible),
+textarea:focus:not(:focus-visible) {
+    outline: none;
+}
+
+input[type=checkbox] {
+    width: 15px;
+    height: 15px;
+    accent-color: var(--teal);
+}
+
+/* ---------------------------------------------------------------------------
+   Tableaux
+   ------------------------------------------------------------------------- */
+.data-table {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 13px;
+    overflow: hidden;
+}
+
+.table-scroll {
+    overflow-x: auto;
+}
+
+.data-table th {
+    padding: 10px 14px;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
+    color: var(--ink-3);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .03em;
+    text-align: left;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.data-table td {
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+}
+
+.data-table tr:last-child td {
+    border-bottom: none;
+}
+
+.data-table tbody tr:hover td {
+    background: var(--surface-2);
+}
+
+.data-table .row-off td {
+    opacity: .55;
+}
+
+.mono {
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+}
+
+.count-foot {
+    margin-top: 10px;
+    font-size: 12px;
     color: var(--ink-3);
 }
 
@@ -759,43 +1040,42 @@ code {
     border: 1px solid var(--border-strong);
     border-radius: 8px;
     color: var(--ink);
+    font-family: inherit;
     font-size: 12.5px;
     font-weight: 500;
+    white-space: nowrap;
 }
 
-.btn:hover {
+.btn:hover:not(:disabled) {
     background: var(--surface-2);
+    text-decoration: none;
+}
+
+.btn-sm {
+    padding: 6px 10px;
+    font-size: 12px;
 }
 
 .btn.primary {
     background: var(--ink);
     border-color: var(--ink);
-    color: #fff;
+    color: var(--surface);
 }
 
-.btn.primary:hover {
-    background: #0B222E;
+.btn.primary:hover:not(:disabled) {
+    background: var(--ink-2);
+    border-color: var(--ink-2);
 }
 
-/* Boutons Bootstrap alignés sur la charte */
-.btn-primary {
-    color: #fff;
-    background-color: var(--teal);
-    border-color: var(--teal-dark);
+.btn.danger {
+    background: transparent;
+    border-color: transparent;
+    color: var(--red);
+    padding: 4px 6px;
 }
 
-.btn-primary:hover,
-.btn-primary:focus {
-    background-color: var(--teal-dark);
-    border-color: var(--teal-dark);
-}
-
-.btn:focus,
-.btn:active:focus,
-.btn-link.nav-link:focus,
-.form-control:focus,
-.form-check-input:focus {
-    box-shadow: 0 0 0 0.1rem #fff, 0 0 0 0.25rem var(--teal);
+.btn.danger:hover:not(:disabled) {
+    background: var(--red-bg);
 }
 
 /* ---------------------------------------------------------------------------
@@ -865,55 +1145,6 @@ code {
 }
 
 /* ---------------------------------------------------------------------------
-   Scanner (mobile)
-   ------------------------------------------------------------------------- */
-.scan-frame {
-    aspect-ratio: 1 / 1;
-    max-width: 280px;
-    margin: 20px auto 18px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--surface-2);
-    border: 2px dashed var(--border-strong);
-    border-radius: 20px;
-    color: var(--ink-3);
-}
-
-.scan-result {
-    display: none;
-    padding: 16px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-}
-
-.scan-result.show {
-    display: block;
-}
-
-.scan-status-bar {
-    margin-bottom: 14px;
-    padding: 14px;
-    border-radius: 10px;
-    text-align: center;
-}
-
-.scan-status-bar.valide { background: var(--green-bg); color: var(--green); }
-.scan-status-bar.expire { background: var(--red-bg); color: var(--red); }
-
-.scan-status-bar .big {
-    font-size: 15px;
-    font-weight: 600;
-}
-
-.scan-status-bar .small {
-    margin-top: 2px;
-    font-size: 12px;
-    opacity: .85;
-}
-
-/* ---------------------------------------------------------------------------
    Écrans à venir (placeholder)
    ------------------------------------------------------------------------- */
 .placeholder {
@@ -923,25 +1154,25 @@ code {
 }
 
 .placeholder .ic {
-    width: 52px;
-    height: 52px;
-    margin: 0 auto 16px;
     display: flex;
     align-items: center;
     justify-content: center;
+    width: 52px;
+    height: 52px;
+    margin: 0 auto 16px;
     background: var(--surface-2);
     border-radius: 14px;
     color: var(--ink-2);
 }
 
-.placeholder h3 {
+.placeholder h1 {
     margin-bottom: 6px;
     font-size: 15px;
     color: var(--ink);
 }
 
 .placeholder p {
-    max-width: 280px;
+    max-width: 320px;
     margin: 0 auto;
     font-size: 13px;
     line-height: 1.5;
@@ -973,27 +1204,15 @@ code {
     color: var(--red);
 }
 
-.form-floating > .form-control-plaintext::placeholder,
-.form-floating > .form-control::placeholder {
-    color: var(--ink-3);
-    text-align: end;
-}
-
-.form-floating > .form-control-plaintext:focus::placeholder,
-.form-floating > .form-control:focus::placeholder {
-    text-align: start;
-}
-
 /* ---------------------------------------------------------------------------
    Blazor — erreurs & chargement
    ------------------------------------------------------------------------- */
 #blazor-error-ui {
-    color-scheme: light only;
     background: var(--amber-bg);
+    border-top: 1px solid var(--amber-border);
     color: var(--ink);
     bottom: 0;
-    box-shadow: 0 -1px 2px rgba(18, 48, 63, .2);
-    box-sizing: border-box;
+    box-shadow: var(--shadow-md);
     display: none;
     left: 0;
     padding: 0.6rem 1.25rem 0.7rem 1.25rem;
@@ -1010,9 +1229,9 @@ code {
     }
 
 .blazor-error-boundary {
-    background: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTYiIGhlaWdodD0iNDkiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgeG1sbnM6eGxpbms9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkveGxpbmsiIG92ZXJmbG93PSJoaWRkZW4iPjxkZWZzPjxjbGlwUGF0aCBpZD0iY2xpcDAiPjxyZWN0IHg9IjIzNSIgeT0iNTEiIHdpZHRoPSI1NiIgaGVpZ2h0PSI0OSIvPjwvY2xpcFBhdGg+PC9kZWZzPjxnIGNsaXAtcGF0aD0idXJsKCNjbGlwMCkiIHRyYW5zZm9ybT0idHJhbnNsYXRlKC0yMzUgLTUxKSI+PHBhdGggZD0iTTI2My41MDYgNTFDMjY0LjcxNyA1MSAyNjUuODEzIDUxLjQ4MzcgMjY2LjYwNiA1Mi4yNjU4TDI2Ny4wNTIgNTIuNzk4NyAyNjcuNTM5IDUzLjYyODMgMjkwLjE4NSA5Mi4xODMxIDI5MC41NDUgOTIuNzk1IDI5MC42NTYgOTIuOTk2QzI5MC44NzcgOTMuNTEzIDI5MSA5NC4wODE1IDI5MSA5NC42NzgyIDI5MSA5Ny4wNjUxIDI4OS4wMzggOTkgMjg2LjYxNyA5OUwyNDAuMzgzIDk5QzIzNy45NjMgOTkgMjM2IDk3LjA2NTEgMjM2IDk0LjY3ODIgMjM2IDk0LjM3OTkgMjM2LjAzMSA5NC4wODg2IDIzNi4wODkgOTMuODA3MkwyMzYuMzM4IDkzLjAxNjIgMjM2Ljg1OCA5Mi4xMzE0IDI1OS40NzMgNTMuNjI5NCAyNTkuOTYxIDUyLjc5ODUgMjYwLjQwNyA1Mi4yNjU4QzI2MS4yIDUxLjQ4MzcgMjYyLjI5NiA1MSAyNjMuNTA2IDUxWk0yNjMuNTg2IDY2LjAxODNDMjYwLjczNyA2Ni4wMTgzIDI1OS4zMTMgNjcuMTI0NSAyNTkuMzEzIDY5LjMzNyAyNTkuMzEzIDY5LjYxMDIgMjU5LjMzMiA2OS44NjA4IDI1OS4zNzEgNzAuMDg4N0wyNjEuNzk1IDg0LjAxNjEgMjY1LjM4IDg0LjAxNjEgMjY3LjgyMSA2OS43NDc1QzI2Ny44NiA2OS43MzA5IDI2Ny44NzkgNjkuNTg3NyAyNjcuODc5IDY5LjMxNzkgMjY3Ljg3OSA2Ny4xMTgyIDI2Ni40NDggNjYuMDE4MyAyNjMuNTg2IDY2LjAxODNaTTI2My41NzYgODYuMDU0N0MyNjEuMDQ5IDg2LjA1NDcgMjU5Ljc4NiA4Ny4zMDA1IDI1OS43ODYgODkuNzkyMSAyNTkuNzg2IDkyLjI4MzcgMjYxLjA0OSA5My41Mjk1IDI2My41NzYgOTMuNTI5NSAyNjYuMTE2IDkzLjUyOTUgMjY3LjM4NyA5Mi4yODM3IDI2Ny4zODcgODkuNzkyMSAyNjcuMzg3IDg3LjMwMDUgMjY2LjExNiA4Ni4wNTQ3IDI2My41NzYgODYuMDU0N1oiIGZpbGw9IiNGRkU1MDAiIGZpbGwtcnVsZT0iZXZlbm9kZCIvPjwvZz48L3N2Zz4=) no-repeat 1rem/1.8rem, var(--red);
-    padding: 1rem 1rem 1rem 3.7rem;
-    color: white;
+    background: var(--red);
+    padding: 1rem;
+    color: var(--red-bg);
 }
 
     .blazor-error-boundary::after {
@@ -1091,18 +1310,9 @@ code {
 
 .auth-field input {
     width: 100%;
-    padding: 9px 11px;
-    font-family: inherit;
-    font-size: 13px;
-    color: var(--ink);
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    outline: none;
 }
 
 .auth-field input:focus {
-    border-color: var(--teal);
     box-shadow: 0 0 0 3px var(--teal-light);
 }
 
@@ -1117,16 +1327,18 @@ code {
     justify-content: center;
     gap: 8px;
     padding: 10px 14px;
+    font-family: inherit;
     font-size: 13px;
     font-weight: 600;
-    color: #fff;
     background: var(--ink);
     border: 1px solid var(--ink);
     border-radius: 8px;
+    color: var(--surface);
 }
 
 .auth-btn:hover:not(:disabled) {
-    background: #0B222E;
+    background: var(--ink-2);
+    border-color: var(--ink-2);
 }
 
 .auth-btn:disabled {
@@ -1152,25 +1364,31 @@ code {
 
 .auth-msg.error {
     background: var(--red-bg);
-    border: 1px solid #F2C9C3;
-    color: #7A2820;
+    border: 1px solid var(--red-border);
+    color: var(--red);
 }
 
 .auth-msg.success {
     background: var(--green-bg);
-    border: 1px solid #C3E2D0;
-    color: #1F5E40;
+    border: 1px solid var(--green-border);
+    color: var(--green);
 }
 
 .auth-spinner {
     width: 14px;
     height: 14px;
-    border: 2px solid rgba(255, 255, 255, .45);
-    border-top-color: #fff;
+    border: 2px solid currentColor;
+    border-top-color: transparent;
     border-radius: 50%;
     animation: auth-spin .7s linear infinite;
 }
 
 @keyframes auth-spin {
     to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .auth-spinner {
+        animation-duration: 2s;
+    }
 }
