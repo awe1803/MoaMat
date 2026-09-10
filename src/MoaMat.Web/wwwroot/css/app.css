@@ -1,14 +1,14 @@
 /* =============================================================================
-   MoaMat — feuille de style principale
-   Système visuel repris de docs/maquette_gestion_materiel_MOANA.html
+   MoaMat — main stylesheet
+   Visual system taken from docs/maquette_gestion_materiel_MOANA.html
    ========================================================================== */
 
 /* ---------------------------------------------------------------------------
-   Jetons de design — thème clair
+   Design tokens — light theme
    ------------------------------------------------------------------------- */
 :root {
-    /* Laisse les contrôles natifs (formulaires, barres de défilement, etc.)
-       suivre le thème clair ou sombre du système. */
+    /* Lets native controls (forms, scrollbars, etc.) follow the system's
+       light or dark theme. */
     color-scheme: light dark;
 
     --ink: #12303F;
@@ -49,16 +49,15 @@
 }
 
 /* ---------------------------------------------------------------------------
-   Mode sombre — suit automatiquement le réglage de l'appareil
-   (prefers-color-scheme). Aucun sélecteur, aucun bouton : rien à activer,
-   l'application bascule quand la machine passe en thème sombre.
+   Dark mode — automatically follows the device setting
+   (prefers-color-scheme). No selector, no button: nothing to enable, the app
+   switches when the machine goes to a dark theme.
 
-   Ce bloc ne redéfinit que des jetons : aucune règle de composant n'a besoin
-   d'être dupliquée par thème. Pour que ce soit possible, les composants qui
-   utilisent --ink comme *fond* écrivent leur texte en var(--surface) plutôt
-   qu'en blanc : les deux jetons s'inversent ensemble, donc le contraste est
-   conservé dans les deux thèmes. Même logique pour les fonds --red / --amber /
-   --green, dont le texte est écrit dans le --*-bg correspondant.
+   This block only redefines tokens: no component rule needs to be duplicated
+   per theme. To make that possible, components that use --ink as a *background*
+   write their text in var(--surface) rather than white: the two tokens invert
+   together, so contrast is preserved in both themes. Same logic for the --red /
+   --amber / --green backgrounds, whose text is written in the matching --*-bg.
    ------------------------------------------------------------------------- */
 @media (prefers-color-scheme: dark) {
     :root {
@@ -182,7 +181,7 @@ code {
 }
 
 /* ---------------------------------------------------------------------------
-   Contenu de page
+   Page content
    ------------------------------------------------------------------------- */
 .content {
     padding: 24px 32px 60px;
@@ -195,7 +194,7 @@ code {
 }
 
 /* ---------------------------------------------------------------------------
-   Marque, recherche, actions de la barre supérieure
+   Brand, search, top bar actions
    ------------------------------------------------------------------------- */
 .brand {
     display: flex;
@@ -251,8 +250,8 @@ code {
     border-color: var(--teal);
 }
 
-/* Le champ ayant son propre anneau désactivé, c'est le cadre qui le porte —
-   et seulement pour un focus clavier. */
+/* The input has its own focus ring disabled, so the frame carries it —
+   and only for a keyboard focus. */
 .searchbox:has(input:focus-visible) {
     outline: 2px solid var(--teal);
     outline-offset: 1px;
@@ -263,8 +262,8 @@ code {
     max-width: 340px;
 }
 
-/* Le champ n'a pas de cadre propre : c'est .searchbox qui porte le fond, la
-   bordure et l'état de focus, l'icône et la saisie ne formant qu'un contrôle. */
+/* The input has no frame of its own: .searchbox carries the background, the
+   border and the focus state, the icon and the input forming a single control. */
 .searchbox input {
     width: 100%;
     padding: 0;
@@ -336,7 +335,7 @@ code {
 }
 
 /* ---------------------------------------------------------------------------
-   En-tête de page
+   Page header
    ------------------------------------------------------------------------- */
 .page-head {
     margin-bottom: 18px;
@@ -388,7 +387,7 @@ code {
 }
 
 /* ---------------------------------------------------------------------------
-   Bandeau d'alerte
+   Alert banner
    ------------------------------------------------------------------------- */
 .alert-banner {
     display: flex;
@@ -421,8 +420,8 @@ code {
     flex-shrink: 0;
     padding: 7px 12px;
     background: var(--red);
-    /* Le texte reprend le fond du bandeau : les deux jetons s'inversent
-       ensemble, donc le bouton reste lisible en clair comme en sombre. */
+    /* The text reuses the banner background: the two tokens invert together,
+       so the button stays readable in light and dark alike. */
     color: var(--red-bg);
     border: none;
     border-radius: 7px;
@@ -438,7 +437,7 @@ code {
 }
 
 /* ---------------------------------------------------------------------------
-   Indicateurs (KPI)
+   Indicators (KPI)
    ------------------------------------------------------------------------- */
 .kpi-grid {
     display: grid;
@@ -483,7 +482,7 @@ code {
 }
 
 /* ---------------------------------------------------------------------------
-   Titre de section
+   Section title
    ------------------------------------------------------------------------- */
 .section-title {
     display: flex;
@@ -502,7 +501,7 @@ code {
 }
 
 /* ---------------------------------------------------------------------------
-   Tuiles de modules
+   Module tiles
    ------------------------------------------------------------------------- */
 .tiles-grid {
     display: grid;
@@ -573,7 +572,7 @@ code {
 .tile-badge.new { background: var(--ink); color: var(--surface); }
 
 /* ---------------------------------------------------------------------------
-   Aperçu de liste
+   List preview
    ------------------------------------------------------------------------- */
 .list-preview {
     background: var(--surface);
@@ -628,7 +627,7 @@ code {
 }
 
 /* ---------------------------------------------------------------------------
-   Badges de statut
+   Status badges
    ------------------------------------------------------------------------- */
 .badge {
     font-family: var(--font-sans);
@@ -650,7 +649,7 @@ code {
 .badge.off { background: var(--surface-2); color: var(--ink-2); }
 
 /* ---------------------------------------------------------------------------
-   Écrans de liste : barre d'outils, filtres, lignes
+   List screens: toolbar, filters, rows
    ------------------------------------------------------------------------- */
 .toolbar {
     display: flex;
@@ -796,8 +795,8 @@ code {
     color: var(--ink-3);
 }
 
-/* Sur mobile, une ligne se replie en carte : les colonnes fixes ne tiennent
-   pas sur 390 px et tronqueraient le code club, qui est l'information clé. */
+/* On mobile, a row collapses into a card: the fixed columns don't fit in
+   390 px and would truncate the club code, which is the key information. */
 @media (max-width: 640.98px) {
     .data-row {
         align-items: flex-start;
@@ -819,7 +818,7 @@ code {
 }
 
 /* ---------------------------------------------------------------------------
-   Formulaires
+   Forms
    ------------------------------------------------------------------------- */
 .filters {
     margin-bottom: 16px;
@@ -864,11 +863,11 @@ code {
     padding-bottom: 8px;
 }
 
-/* Tout champ de saisie textuel, y compris un <input> sans attribut type —
-   c'est ce que rend un <InputText> auquel on n'en passe pas, et une liste de
-   types explicite le laisserait sans style. Le :where() garde la spécificité
-   à celle du seul sélecteur d'élément, pour qu'une règle de composant comme
-   « .searchbox input » suffise à reprendre la main. */
+/* Any text input, including an <input> with no type attribute — that's what an
+   <InputText> renders when none is passed, and an explicit list of types would
+   leave it unstyled. The :where() keeps specificity at that of the element
+   selector alone, so a component rule like ".searchbox input" is enough to
+   override it. */
 input:where([type=text], [type=email], [type=password], [type=search],
             [type=date], [type=number], [type=tel], [type=url], :not([type])),
 select,
@@ -889,8 +888,8 @@ textarea:focus {
     border-color: var(--teal);
 }
 
-/* L'anneau de focus n'est retiré qu'au clic : au clavier il reste visible,
-   c'est le seul repère de position dans un formulaire. */
+/* The focus ring is only removed on click: on the keyboard it stays visible,
+   as it's the only position cue in a form. */
 input:focus:not(:focus-visible),
 select:focus:not(:focus-visible),
 textarea:focus:not(:focus-visible) {
@@ -904,7 +903,7 @@ input[type=checkbox] {
 }
 
 /* ---------------------------------------------------------------------------
-   Tableaux
+   Tables
    ------------------------------------------------------------------------- */
 .data-table {
     width: 100%;
@@ -964,7 +963,7 @@ input[type=checkbox] {
 }
 
 /* ---------------------------------------------------------------------------
-   Fiche détail
+   Detail sheet
    ------------------------------------------------------------------------- */
 .fiche-head {
     display: flex;
@@ -1022,7 +1021,7 @@ input[type=checkbox] {
 }
 
 /* ---------------------------------------------------------------------------
-   Boutons
+   Buttons
    ------------------------------------------------------------------------- */
 .btn-row {
     display: flex;
@@ -1079,7 +1078,7 @@ input[type=checkbox] {
 }
 
 /* ---------------------------------------------------------------------------
-   Chronologie
+   Timeline
    ------------------------------------------------------------------------- */
 .timeline {
     position: relative;
@@ -1145,7 +1144,7 @@ input[type=checkbox] {
 }
 
 /* ---------------------------------------------------------------------------
-   Écrans à venir (placeholder)
+   Upcoming screens (placeholder)
    ------------------------------------------------------------------------- */
 .placeholder {
     padding: 50px 20px;
@@ -1190,7 +1189,7 @@ input[type=checkbox] {
 }
 
 /* ---------------------------------------------------------------------------
-   Formulaires — validation
+   Forms — validation
    ------------------------------------------------------------------------- */
 .valid.modified:not([type=checkbox]) {
     outline: 1px solid var(--green);
@@ -1205,7 +1204,7 @@ input[type=checkbox] {
 }
 
 /* ---------------------------------------------------------------------------
-   Blazor — erreurs & chargement
+   Blazor — errors & loading
    ------------------------------------------------------------------------- */
 #blazor-error-ui {
     background: var(--amber-bg);
@@ -1274,8 +1273,8 @@ input[type=checkbox] {
     }
 
 /* ---------------------------------------------------------------------------
-   Écrans d'authentification (connexion, mot de passe oublié, réinitialisation)
-   Utilisés sous AuthLayout ; la mise en page de la carte vit dans
+   Authentication screens (login, forgot password, reset)
+   Used under AuthLayout; the card layout lives in
    Layout/AuthLayout.razor.css.
    ------------------------------------------------------------------------- */
 .auth-title {

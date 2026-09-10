@@ -1,9 +1,8 @@
 /* =============================================================================
-   Rail de navigation — « side-item » de la maquette MOANA.
+   Navigation rail — the MOANA mock-up's "side-item".
 
-   Les icônes sont désormais des SVG en `currentColor` (composant Icon), donc
-   plus aucune couleur codée en dur : le thème sombre est pris en charge par
-   les seuls jetons de app.css.
+   Icons are now `currentColor` SVGs (Icon component), so there is no more
+   hard-coded color: dark mode is handled by the app.css tokens alone.
    ========================================================================== */
 
 .side-nav {
@@ -14,8 +13,8 @@
     padding: 16px 10px 8px;
 }
 
-/* La marque n'est répétée dans le rail que sur mobile, où le tiroir masque
-   la barre supérieure. */
+/* The brand is only repeated in the rail on mobile, where the drawer hides
+   the top bar. */
 .side-brand {
     display: none;
     align-items: center;
@@ -79,7 +78,7 @@
 }
 
 /* ---------------------------------------------------------------------------
-   Pied du rail : identité et déconnexion
+   Rail footer: identity and sign-out
    ------------------------------------------------------------------------- */
 .side-user {
     margin: auto 16px 0;
@@ -124,8 +123,8 @@
 }
 
 /* ---------------------------------------------------------------------------
-   Mobile : le rail devient un tiroir, il porte donc la marque et occupe
-   toute la hauteur.
+   Mobile: the rail becomes a drawer, so it carries the brand and takes up
+   the full height.
    ------------------------------------------------------------------------- */
 @media (max-width: 640.98px) {
     .side-brand {

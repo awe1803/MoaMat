@@ -1,4 +1,4 @@
-/* Colonne « État » : le badge et le bouton d'activation tiennent sur une ligne. */
+/* "État" column: the badge and the activation button fit on one line. */
 .cell-state {
     display: flex;
     align-items: center;

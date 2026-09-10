@@ -1,10 +1,10 @@
 /* =============================================================================
-   Coquille applicative — reprise de la maquette MOANA.
+   Application shell — based on the MOANA mock-up.
 
-   Le chrome bureau (barre supérieure + rail latéral) et le chrome mobile
-   (barre compacte + onglets bas + tiroir) coexistent dans le même balisage :
-   c'est la requête média qui tranche, jamais du C#. Toutes les couleurs
-   passent par les jetons de app.css, donc le thème sombre suit l'appareil.
+   The desktop chrome (top bar + side rail) and the mobile chrome (compact bar
+   + bottom tabs + drawer) coexist in the same markup: the media query decides,
+   never C#. All colors go through the app.css tokens, so dark mode follows the
+   device.
    ========================================================================== */
 
 .app-shell {
@@ -15,7 +15,7 @@
 }
 
 /* ---------------------------------------------------------------------------
-   Barre supérieure — bureau
+   Top bar — desktop
    ------------------------------------------------------------------------- */
 .topbar-desktop {
     display: none;
@@ -57,7 +57,7 @@
 }
 
 /* ---------------------------------------------------------------------------
-   Barre supérieure — mobile
+   Top bar — mobile
    ------------------------------------------------------------------------- */
 .topbar-mobile {
     display: none;
@@ -71,7 +71,7 @@
 }
 
 /* ---------------------------------------------------------------------------
-   Corps
+   Body
    ------------------------------------------------------------------------- */
 .body-row {
     display: flex;
@@ -99,7 +99,7 @@
 }
 
 /* ---------------------------------------------------------------------------
-   Onglets bas — mobile
+   Bottom tabs — mobile
    ------------------------------------------------------------------------- */
 .bottomnav {
     display: none;
@@ -158,7 +158,7 @@
 }
 
 /* ---------------------------------------------------------------------------
-   Bureau — à partir de 641 px
+   Desktop — from 641 px up
    ------------------------------------------------------------------------- */
 @media (min-width: 641px) {
     .topbar-desktop {
@@ -177,7 +177,7 @@
 }
 
 /* ---------------------------------------------------------------------------
-   Mobile — jusqu'à 640 px : tiroir de navigation et onglets bas
+   Mobile — up to 640 px: navigation drawer and bottom tabs
    ------------------------------------------------------------------------- */
 @media (max-width: 640.98px) {
     .topbar-mobile {
@@ -221,7 +221,7 @@
     }
 }
 
-/* Respecte le réglage système « réduire les animations ». */
+/* Honors the system "reduce motion" setting. */
 @media (prefers-reduced-motion: reduce) {
     .sidebar {
         transition: none;

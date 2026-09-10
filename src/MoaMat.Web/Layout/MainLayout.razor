@@ -2,7 +2,7 @@
 
 <div class="app-shell">
 
-    @* ---------- Barre supérieure — bureau ---------- *@
+    @* ---------- Top bar — desktop ---------- *@
     <header class="topbar-desktop">
         <a class="brand" href="">
             <img src="logo_Royal_Moana.png" alt="Royal Moana" class="brand-logo" />
@@ -43,7 +43,7 @@
         </div>
     </header>
 
-    @* ---------- Barre supérieure — mobile ---------- *@
+    @* ---------- Top bar — mobile ---------- *@
     <header class="topbar-mobile">
         <button type="button" class="icon-btn" @onclick="ToggleNav"
                 aria-expanded="@(_isNavOpen ? "true" : "false")" aria-controls="nav-principal"
@@ -62,7 +62,7 @@
         </a>
     </header>
 
-    @* ---------- Corps : navigation + contenu ---------- *@
+    @* ---------- Body: navigation + content ---------- *@
     <div class="body-row">
         <div class="nav-backdrop @(_isNavOpen ? "open" : null)" @onclick="CloseNav"></div>
 
@@ -77,7 +77,7 @@
         </main>
     </div>
 
-    @* ---------- Barre inférieure — mobile ---------- *@
+    @* ---------- Bottom bar — mobile ---------- *@
     <nav class="bottomnav" aria-label="Navigation principale">
         <NavLink class="nav-tab" href="" Match="NavLinkMatch.All">
             <Icon Name="home" Size="20" /><span>Accueil</span>

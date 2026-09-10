@@ -1,5 +1,5 @@
-/* Trois colonnes en cascade : section → local → contenant.
-   Les couleurs viennent toutes des jetons de app.css, le thème sombre suit. */
+/* Three cascading columns: section -> room -> container.
+   All colors come from the app.css tokens, so dark mode follows along. */
 
 .lx-cols {
     display: flex;
