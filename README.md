@@ -10,12 +10,43 @@ Gestion de l'inventaire du matériel de plongée de l'ASBL Royal Moana.
 - **Back** : [Supabase](https://supabase.com) (PostgreSQL managé) — seul backend, appelé
   depuis le client via le package `Supabase` (`supabase-csharp`).
 
+## Architecture
+
+Découpage **hexagonal** (ports & adaptateurs), une couche par assembly — la
+direction des dépendances est donc vérifiée par le compilateur, pas seulement
+par convention :
+
+| Projet | Rôle | Dépend de |
+|--------|------|-----------|
+| `src/MoaMat.Domain` | Cœur métier : *value objects*, invariants, règles d'habilitation d'écran, et les **ports** (`IAccountRepository`, `IInventoryRepository`, `ILocationRepository`, `IAuditLogRepository`, `IAuthenticationService`) | *rien* |
+| `src/MoaMat.Infrastructure` | Adaptateurs **pilotés** : tout ce qui connaît Supabase (formes PostgREST, mapping, traduction des erreurs, construction du client) | Domain + `Supabase` |
+| `src/MoaMat.Web` | Adaptateur **pilotant** : la PWA Blazor WASM, plus ce qui est propre au navigateur (localStorage, `AuthenticationStateProvider`, URLs) | Domain + Infrastructure |
+| `tests/MoaMat.UnitTests` | Tests unitaires du cœur (xUnit v3) | Domain + Infrastructure |
+
+Points structurants :
+
+- **Aucun composant Razor ne connaît Supabase.** L'UI parle aux ports ; un
+  changement de backend se limite à `MoaMat.Infrastructure`.
+- **Les règles d'habilitation d'écran vivent dans le domaine**
+  (`AccountAdministrationPolicy`), pas dans le balisage. Elles pilotent des
+  *affordances* — la ligne de sécurité réelle reste les policies **RLS**
+  (`db/rls.sql`), qui refusent de toute façon.
+- **Lectures et écritures ne signalent pas leurs échecs de la même façon** :
+  une lecture qui échoue lève `DataAccessException` (message déjà traduit,
+  affichable tel quel) ; une écriture refusée renvoie un `OperationResult` en
+  échec, parce qu'un refus est un résultat attendu que l'utilisateur doit voir.
+- **Les invariants sont portés par des types** : `LocationLabel` rend impossible
+  la création d'un lieu au libellé vide, `RelativeReturnUrl` rend impossible une
+  redirection hors application, `AppRole` rend impossible un rang de rôle
+  inventé.
+
 ## Arborescence
 
 ```
+src/MoaMat.Domain/      Cœur métier + ports (aucune dépendance)
+src/MoaMat.Infrastructure/  Adaptateurs Supabase (PostgREST, GoTrue)
 src/MoaMat.Web/         Application Blazor WASM PWA
-src/MoaMat.Web/Auth/    Authentification Supabase (session persistée, rôles)
-src/MoaMat.Web/Data/    Accès aux données Supabase (journal d'audit…)
+tests/MoaMat.UnitTests/ Tests unitaires du cœur (xUnit v3)
 db/schema.sql           Schéma PostgreSQL (28 tables miroir Access + RLS sans policy)
 db/initial_load.sql     Reprise des données Access dans le miroir (généré)
 db/roles.sql            Table utilisateur_role + trigger + fonctions de rôle
@@ -36,6 +67,43 @@ Access_Data/            Export CSV de l'ancienne base Access + doc de nommage
 Analyse/                Analyse fonctionnelle et plan de reprise
 ```
 
+## Interface — système visuel et thème sombre
+
+L'interface applique la maquette
+[`docs/maquette_gestion_materiel_MOANA.html`](docs/maquette_gestion_materiel_MOANA.html) :
+barre supérieure + rail de modules sur bureau, barre compacte + onglets bas
+(avec le bouton Scanner en pastille) sur mobile, le même balisage servant les
+deux — c'est une requête média qui tranche, jamais du C#.
+
+| Fichier | Rôle |
+| --- | --- |
+| `src/MoaMat.Web/wwwroot/css/app.css` | Jetons de design et système visuel commun |
+| `src/MoaMat.Web/Components/Icon.razor` | Jeu d'icônes SVG de la maquette, tracé en `currentColor` |
+| `src/MoaMat.Web/Navigation/AppModules.cs` | Catalogue des modules : rail, tuiles et écrans « à venir » |
+| `src/MoaMat.Web/Presentation/` | Culture, libellés de validité, horodatages, résumé du tableau de bord |
+
+**Le thème sombre suit l'appareil, et rien d'autre.** Pas de bascule, pas de
+préférence stockée, pas de classe posée sur le document : un seul bloc
+`@media (prefers-color-scheme: dark)` redéfinit **uniquement des variables**.
+Pour que ce soit suffisant, deux règles tiennent tout le reste :
+
+- un composant dont le *fond* est `--ink` écrit son texte en `var(--surface)`,
+  jamais en blanc — les deux jetons s'inversent ensemble, le contraste est donc
+  conservé dans les deux thèmes ;
+- même chose pour les fonds `--red` / `--amber` / `--green`, dont le texte
+  reprend le `--*-bg` correspondant.
+
+Conséquence : aucune règle de composant n'est dupliquée par thème, et une
+nouvelle vue est correcte en sombre du seul fait qu'elle utilise les jetons.
+Les icônes étant des SVG en `currentColor`, elles suivent sans variante.
+`index.html` complète le dispositif côté navigateur (`color-scheme` pour les
+contrôles natifs, deux `theme-color` pour la barre du navigateur mobile et de
+la PWA installée).
+
+> Bootstrap a été retiré : la maquette n'en utilise rien, et ses variables
+> `data-bs-theme` imposaient un second mécanisme de thème en concurrence avec
+> les jetons.
+
 ## Démarrage — application
 
 ```bash
@@ -43,8 +111,44 @@ cp src/MoaMat.Web/wwwroot/appsettings.sample.json src/MoaMat.Web/wwwroot/appsett
 # éditer appsettings.json : renseigner Supabase:Url et Supabase:AnonKey
 dotnet restore MoaMat.slnx
 dotnet build   MoaMat.slnx
+dotnet test    MoaMat.slnx
 dotnet run --project src/MoaMat.Web
 ```
+
+> L'application **refuse de démarrer** si `Supabase:Url` / `Supabase:AnonKey`
+> sont absents, malformés, ou si la clé configurée est une clé privilégiée
+> (`sb_secret_…` ou JWT dont le claim `role` n'est pas `anon`). Démarrer sans
+> configuration ne ferait que déplacer l'échec à la première requête, où il
+> ressemble à une panne réseau ; démarrer avec une clé de service serait une
+> fuite. Voir `SupabaseSettings.Validate()` et `SupabaseKeyInspector`.
+
+### Tests
+
+```bash
+dotnet test MoaMat.slnx
+```
+
+Les tests unitaires (xUnit v3) couvrent le cœur : hiérarchie de rôles, règles
+d'administration des comptes, validation d'URL de retour, libellés de lieux,
+bornage des requêtes d'inventaire, classification des clés Supabase et
+conversion de dates. Ils tournent en **barrière CI avant toute publication**
+(`.github/workflows/deploy.yml`).
+
+`global.json` active le nouveau *runner* `dotnet test` : les exécutables de test
+xUnit v3 parlent Microsoft.Testing.Platform, pas l'ancien protocole VSTest que
+le SDK .NET 10 n'accepte plus.
+
+### Conventions de code
+
+- **Une classe par fichier**, nom de fichier = nom du type.
+- **Code en anglais** (types, membres, commentaires) ; **produit en français**
+  (libellés d'écran, messages d'erreur affichés, routes, identifiants SQL).
+  La frontière est nette : ce qu'un membre du club lit reste en français, ce
+  qu'un développeur lit est en anglais.
+- Analyseurs .NET activés et **avertissements traités en erreurs**
+  (`Directory.Build.props`) ; conventions dans `.editorconfig`.
+- Versions NuGet centralisées dans `Directory.Packages.props`
+  (*Central Package Management*), avec `NuGetAudit` en garde-fou.
 
 ### Configuration Supabase
 
@@ -64,7 +168,7 @@ les policies **RLS** définies dans `db/schema.sql`.
 `sb_secret_…`) ne doit jamais figurer dans le code, `appsettings*.json`, les
 Variables/Secrets lus par `deploy.yml`, ni les assets publiés. Deux garde-fous :
 
-- au démarrage, `Program.cs` décode la clé configurée et journalise une **erreur**
+- au démarrage, `SupabaseSettings.Validate()` décode la clé configurée et **empêche l'application de démarrer**
   si son rôle JWT n'est pas `anon` (ou si c'est une clé `sb_secret_…`) ;
 - l'étape *« Assert only the anon key ships to the client »* de `deploy.yml`
   échoue (donc bloque le déploiement) si `service_role` / `sb_secret_` apparaît
@@ -73,7 +177,8 @@ Variables/Secrets lus par `deploy.yml`, ni les assets publiés. Deux garde-fous 
 ### Authentification & rôles
 
 - Connexion / déconnexion et réinitialisation de mot de passe : Supabase Auth
-  (Gotrue), via [`src/MoaMat.Web/Auth/`](src/MoaMat.Web/Auth/). Pages
+  (Gotrue), via le port `IAuthenticationService` et son adaptateur
+  [`SupabaseAuthenticationService`](src/MoaMat.Infrastructure/Supabase/SupabaseAuthenticationService.cs). Pages
   `/connexion`, `/mot-de-passe-oublie`, `/reinitialiser-mot-de-passe`,
   `/deconnexion`. Toutes les autres routes exigent une session (`[Authorize]`).
 - **Session persistée** dans le `localStorage` du navigateur
@@ -87,7 +192,7 @@ Variables/Secrets lus par `deploy.yml`, ni les assets publiés. Deux garde-fous 
   client. Les policies RLS lisent le rôle dans cette table ; le hook
   `public.custom_access_token_hook` le recopie dans le claim JWT
   `app_metadata.role`, que Blazor lit pour piloter la navigation (politiques
-  `role:lecture+` … `role:super-admin`, voir `MoaMatRoles`). Détail complet du
+  `role:lecture+` … `role:super-admin`, voir `AuthorizationPolicyNames`). Détail complet du
   modèle (permissions nommées, RLS, audit, tests) : [`db/SECURITE.md`](db/SECURITE.md).
 - **Configuration Supabase requise** : *Authentication → Hooks* → activer
   *Custom Access Token* → `public.custom_access_token_hook`.
@@ -232,31 +337,32 @@ Deux étages :
 L'activation des clés étrangères du miroir reste un chantier distinct (contraintes
 FK pré-écrites mais commentées en fin de `schema.sql`).
 
-## Architecture cible
+## Fonctionnalités en place
 
-Découpage visé, **non encore implémenté** :
+Le découpage décrit plus haut (voir [Architecture](#architecture)) est
+**implémenté**. Sont en place :
 
-| Couche | Rôle | Contenu prévu |
-|--------|------|---------------|
-| Domaine | modèles métier | classes POCO mappées sur les tables de `db/schema.sql` (attributs `[Table]` / `BaseModel` de `supabase-csharp`) |
-| Services | accès données | interfaces + implémentations encapsulant le `Supabase.Client` (une par agrégat : bouteilles, détendeurs, prêts…), injectées dans l'UI |
-| UI | présentation | composants Razor, aucun appel Supabase direct |
+- **Authentification** — session persistée dans le navigateur,
+  `AuthenticationStateProvider`, écrans de connexion / réinitialisation, garde de
+  routes, rôles applicatifs.
+- **Comptes** (`/comptes`) — attribution de rôle et activation, arbitrées par
+  `AccountAdministrationPolicy` côté écran et par la RLS côté base.
+- **Journal d'audit** (`/journal-audit`) — lecture seule du journal en ajout seul.
+- **Inventaire** (`/inventaire`) — liste filtrée (famille, statut, lieu,
+  échéance, état) avec badge « code ambigu », désactivation logique.
+- **Lieux** (`/lieux`, admin+) — CRUD de la hiérarchie Section → Local → Contenant.
 
-État actuel : le `Supabase.Client` est enregistré en DI dans
-[`Program.cs`](src/MoaMat.Web/Program.cs). Sont en place :
+Rappel : la couche d'accès aux données **n'est pas** la ligne de sécurité — elle
+est portée par les policies RLS (`db/rls.sql`). Le reste de l'UI métier (fiches
+de détail par famille, prêts, achats…) et l'activation des FK du miroir seront
+traités séparément.
 
-- **Authentification** (`src/MoaMat.Web/Auth/` : session persistée,
-  `AuthenticationStateProvider`, `AuthService`, pages de connexion /
-  réinitialisation, garde de routes, rôles) ;
-- **Comptes** (`Data/CompteService`, écran `/comptes`) et **journal d'audit**
-  (`/journal-audit`) ;
-- **Inventaire** (modèle Item) : POCO `Data/Item*.cs`, `Data/Lieux.cs`,
-  `Data/RefStatut.cs` ; services `Data/ItemService` (lecture via la vue
-  `v_item`, écriture / désactivation logique, filtres statut / échéance / lieu /
-  famille) et `Data/LieuService` (CRUD de la hiérarchie de lieux) ; écrans
-  `/inventaire` (liste + badge « code ambigu ») et `/lieux` (admin+).
+### Reste à faire
 
-Rappel : ces services **ne sont pas** la ligne de sécurité — elle est portée par
-les policies RLS (`db/rls.sql`). Le reste de l'UI métier (fiches de détail par
-famille, prêts, achats…) et l'activation des FK du miroir seront traités
-séparément.
+- Fiches de détail par famille : les spécialisations `item_*` sont décrites côté
+  infrastructure (`MoaMat.Infrastructure/Supabase/Records/Item*Record.cs`) mais
+  ne sont **pas exposées par un port** tant qu'aucun écran ne les consomme.
+- Concurrence optimiste sur `public.item` : une mise à jour est aujourd'hui du
+  *last-write-wins*, sans jeton de version.
+- Pagination de l'inventaire : les requêtes sont bornées (500 lignes par défaut,
+  1000 au maximum) mais il n'y a pas encore de pagination visible à l'écran.

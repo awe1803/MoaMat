@@ -1,0 +1,64 @@
+/* Three cascading columns: section -> room -> container.
+   All colors come from the app.css tokens, so dark mode follows along. */
+
+.lx-cols {
+    display: flex;
+    gap: 18px;
+    margin-top: 4px;
+    flex-wrap: wrap;
+}
+
+.lx-col {
+    flex: 1 1 240px;
+    min-width: 240px;
+}
+
+.lx-col h2 {
+    margin-bottom: 8px;
+}
+
+.lx-list {
+    max-height: 22rem;
+    margin-bottom: 10px;
+    overflow-y: auto;
+}
+
+.lx-row {
+    gap: 6px;
+    padding: 4px 8px 4px 12px;
+}
+
+.lx-row.lx-sel {
+    background: var(--teal-light);
+}
+
+.lx-pick {
+    flex: 1;
+    min-width: 0;
+    padding: 6px 0;
+    background: none;
+    border: none;
+    color: var(--ink);
+    font-family: inherit;
+    font-size: 13px;
+    text-align: left;
+}
+
+.lx-row.lx-sel .lx-pick {
+    color: var(--teal-dark);
+    font-weight: 500;
+}
+
+.lx-leaf {
+    cursor: default;
+}
+
+.lx-add {
+    display: flex;
+    gap: 8px;
+}
+
+.lx-add input {
+    flex: 1;
+    min-width: 0;
+}

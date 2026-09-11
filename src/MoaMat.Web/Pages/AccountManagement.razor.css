@@ -1,0 +1,7 @@
+/* "État" column: the badge and the activation button fit on one line. */
+.cell-state {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+}

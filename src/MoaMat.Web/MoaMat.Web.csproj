@@ -1,18 +1,24 @@
 <Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
 
+  <!--
+    Driving adapter: the Blazor WebAssembly PWA. It composes the domain ports
+    with the Supabase adapters and owns everything browser-specific.
+  -->
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>MoaMat.Web</RootNamespace>
     <OverrideHtmlAssetPlaceholders>true</OverrideHtmlAssetPlaceholders>
     <ServiceWorkerAssetsManifest>service-worker-assets.js</ServiceWorkerAssetsManifest>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.AspNetCore.Components.Authorization" Version="10.0.11" />
-    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.11" />
-    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="10.0.11" PrivateAssets="all" />
-    <PackageReference Include="Supabase" Version="8.0.0" />
+    <ProjectReference Include="..\MoaMat.Domain\MoaMat.Domain.csproj" />
+    <ProjectReference Include="..\MoaMat.Infrastructure\MoaMat.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.Authorization" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup>

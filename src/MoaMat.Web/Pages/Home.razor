@@ -1,11 +1,97 @@
 @page "/"
 @attribute [Microsoft.AspNetCore.Authorization.Authorize]
 
-<PageTitle>Home</PageTitle>
+<PageTitle>Tableau de bord — MoaMat</PageTitle>
 
-<div class="home-title">
-    <img src="logo_Royal_Moana.png" alt="Royal Moana — École de plongée sous-marine" class="home-logo" />
-    <h1>Hello, world!</h1>
+<div class="page-head">
+    <h1>Tableau de bord</h1>
+    <div class="sub">@Today.ToString("dddd d MMMM yyyy", AppCulture.French)</div>
 </div>
 
-Welcome to your new app.
+@if (_error is not null)
+{
+    <p class="msg-error" role="alert">@_error</p>
+}
+
+@if (_summary.Overdue > 0)
+{
+    <div class="alert-banner">
+        <Icon Name="alert" Size="18" />
+        <div class="txt">
+            <b>@_summary.Overdue item(s) sur @_summary.Total</b> ont dépassé leur échéance
+            et restent listés comme disponibles. Une campagne de requalification est nécessaire.
+        </div>
+        <a class="alert-action" href="@OverdueHref">Voir la liste</a>
+    </div>
+}
+
+<div class="kpi-grid">
+    <div class="kpi-card">
+        <div class="kpi-label">Échéances dépassées</div>
+        <div class="kpi-value red">@Figure(_summary.Overdue)</div>
+        <div class="kpi-foot">sur @Figure(_summary.Total) items actifs</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-label">Échéances proches</div>
+        <div class="kpi-value amber">@Figure(_summary.DueSoon)</div>
+        <div class="kpi-foot">sous @InventoryItem.DueSoonHorizonInDays jours</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-label">Codes club ambigus</div>
+        <div class="kpi-value">@Figure(_summary.AmbiguousCodes)</div>
+        <div class="kpi-foot">signalés, jamais renumérotés</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-label">Inventaire actif</div>
+        <div class="kpi-value green">@Figure(_summary.Total)</div>
+        <div class="kpi-foot">@_families.Count famille(s) suivie(s)</div>
+    </div>
+</div>
+
+<div class="section-title">
+    Modules
+    <a href="inventaire">tout l'inventaire</a>
+</div>
+
+<div class="tiles-grid">
+    @foreach (var module in _modules)
+    {
+        <a class="tile" href="@module.Href">
+            @if (!module.IsAvailable)
+            {
+                <span class="tile-badge new">à venir</span>
+            }
+            <span class="tile-icon @(module.IsAvailable ? "c-teal" : "c-gray")">
+                <Icon Name="@module.Icon" />
+            </span>
+            <span class="tile-title">@module.Title</span>
+            <span class="tile-sub">@DescribeModule(module)</span>
+        </a>
+    }
+</div>
+
+<div class="section-title">Prochaines échéances</div>
+
+@if (_isBusy)
+{
+    <p class="msg-muted">Chargement de l'inventaire…</p>
+}
+else if (_summary.NextDue.Count == 0)
+{
+    <p class="msg-muted">Aucune échéance enregistrée sur l'inventaire actif.</p>
+}
+else
+{
+    <div class="list-preview">
+        @foreach (var item in _summary.NextDue)
+        {
+            var status = item.DueStatusOn(Today);
+            <a class="lp-row" href="@InventoryHrefFor(item)">
+                <span class="lp-code">@(item.ClubCode ?? "—")</span>
+                <span class="lp-mid">@DescribeItem(item)</span>
+                <span class="lp-date">@FormatDue(item.DueOn)</span>
+                <span class="@DueStatusView.BadgeClass(status)">@DueStatusView.Label(status)</span>
+            </a>
+        }
+    </div>
+}

@@ -37,6 +37,11 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      # Barrière qualité : la suite de tests unitaires doit passer avant toute
+      # publication. Échec ici => build en échec => déploiement bloqué.
+      - name: Run unit tests
+        run: dotnet test tests/MoaMat.UnitTests/MoaMat.UnitTests.csproj -c Release
+
       - name: Install wasm-tools workload
         run: dotnet workload install wasm-tools
 

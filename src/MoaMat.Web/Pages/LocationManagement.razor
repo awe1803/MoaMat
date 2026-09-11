@@ -1,0 +1,131 @@
+@page "/lieux"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+
+<PageTitle>Lieux — MoaMat</PageTitle>
+
+<AuthorizeView Policy="@AuthorizationPolicyNames.AdministratorOrHigher">
+    <NotAuthorized>
+        <div class="page-head"><h1>Hiérarchie de lieux</h1></div>
+        <p class="msg-error" role="alert">
+            L'administration des lieux est réservée aux rôles
+            <strong>administrateur</strong> et <strong>super-administrateur</strong>.
+        </p>
+    </NotAuthorized>
+    <Authorized>
+        <div class="page-head">
+            <h1>Hiérarchie de lieux</h1>
+            <div class="sub">
+                Section → Local → Contenant. Le contenant est le niveau rattaché à un
+                item. <strong>La section n'est pas un périmètre de droits</strong>
+                (Q18.3) : c'est un axe de rangement.
+            </div>
+        </div>
+
+        @if (_error is not null)
+        {
+            <p class="msg-error" role="alert">@_error</p>
+        }
+
+        <div class="lx-cols">
+            @* --- Sections --- *@
+            <section class="lx-col">
+                <h2>Sections</h2>
+                <div class="data-list lx-list">
+                    @if (_sections.Count == 0)
+                    {
+                        <p class="data-empty">Aucune section.</p>
+                    }
+                    @foreach (var section in _sections)
+                    {
+                        <div class="data-row lx-row @(section.Id == _selectedSectionId ? "lx-sel" : null)">
+                            <button type="button" class="lx-pick"
+                                    @onclick="() => SelectSectionAsync(section.Id)">@section.Label</button>
+                            <button type="button" class="btn danger" title="Supprimer"
+                                    @onclick="() => DeleteSectionAsync(section.Id)">
+                                <Icon Name="close" Size="14" />
+                            </button>
+                        </div>
+                    }
+                </div>
+                <div class="lx-add">
+                    <input type="text" placeholder="Nouvelle section" maxlength="@LocationLabel.MaxLength"
+                           aria-label="Nouvelle section"
+                           @bind="_newSectionLabel" @bind:event="oninput" />
+                    <button type="button" class="btn primary" @onclick="AddSectionAsync"
+                            disabled="@(_isBusy || string.IsNullOrWhiteSpace(_newSectionLabel))">Ajouter</button>
+                </div>
+            </section>
+
+            @* --- Rooms --- *@
+            <section class="lx-col">
+                <h2>Locaux</h2>
+                @if (_selectedSectionId is null)
+                {
+                    <p class="msg-muted">Choisir une section.</p>
+                }
+                else
+                {
+                    <div class="data-list lx-list">
+                        @if (_rooms.Count == 0)
+                        {
+                            <p class="data-empty">Aucun local.</p>
+                        }
+                        @foreach (var room in _rooms)
+                        {
+                            <div class="data-row lx-row @(room.Id == _selectedRoomId ? "lx-sel" : null)">
+                                <button type="button" class="lx-pick"
+                                        @onclick="() => SelectRoomAsync(room.Id)">@room.Label</button>
+                                <button type="button" class="btn danger" title="Supprimer"
+                                        @onclick="() => DeleteRoomAsync(room.Id)">
+                                    <Icon Name="close" Size="14" />
+                                </button>
+                            </div>
+                        }
+                    </div>
+                    <div class="lx-add">
+                        <input type="text" placeholder="Nouveau local" maxlength="@LocationLabel.MaxLength"
+                               aria-label="Nouveau local"
+                               @bind="_newRoomLabel" @bind:event="oninput" />
+                        <button type="button" class="btn primary" @onclick="AddRoomAsync"
+                                disabled="@(_isBusy || string.IsNullOrWhiteSpace(_newRoomLabel))">Ajouter</button>
+                    </div>
+                }
+            </section>
+
+            @* --- Containers --- *@
+            <section class="lx-col">
+                <h2>Contenants</h2>
+                @if (_selectedRoomId is null)
+                {
+                    <p class="msg-muted">Choisir un local.</p>
+                }
+                else
+                {
+                    <div class="data-list lx-list">
+                        @if (_containers.Count == 0)
+                        {
+                            <p class="data-empty">Aucun contenant.</p>
+                        }
+                        @foreach (var container in _containers)
+                        {
+                            <div class="data-row lx-row">
+                                <span class="lx-pick lx-leaf">@container.Label</span>
+                                <button type="button" class="btn danger" title="Supprimer"
+                                        @onclick="() => DeleteContainerAsync(container.Id)">
+                                    <Icon Name="close" Size="14" />
+                                </button>
+                            </div>
+                        }
+                    </div>
+                    <div class="lx-add">
+                        <input type="text" placeholder="Nouveau contenant" maxlength="@LocationLabel.MaxLength"
+                               aria-label="Nouveau contenant"
+                               @bind="_newContainerLabel" @bind:event="oninput" />
+                        <button type="button" class="btn primary" @onclick="AddContainerAsync"
+                                disabled="@(_isBusy || string.IsNullOrWhiteSpace(_newContainerLabel))">Ajouter</button>
+                    </div>
+                }
+            </section>
+        </div>
+    </Authorized>
+</AuthorizeView>

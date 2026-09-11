@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Driven adapters. Everything that knows Supabase lives here and nowhere else:
+    PostgREST record shapes, error translation, client construction. It depends
+    on MoaMat.Domain, never the other way round.
+  -->
+  <PropertyGroup>
+    <RootNamespace>MoaMat.Infrastructure</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MoaMat.Domain\MoaMat.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Supabase" />
+  </ItemGroup>
+
+</Project>

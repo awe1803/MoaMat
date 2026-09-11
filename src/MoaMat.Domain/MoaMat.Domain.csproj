@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Domain core (hexagon). Holds the business vocabulary, the invariants that
+    can be enforced client-side, and the ports (interfaces) that adapters
+    implement. It has NO dependency: every arrow points inwards, to here.
+  -->
+  <PropertyGroup>
+    <RootNamespace>MoaMat.Domain</RootNamespace>
+  </PropertyGroup>
+
+</Project>

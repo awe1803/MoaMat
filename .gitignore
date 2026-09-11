@@ -496,3 +496,4 @@ db/initial_load.sql
 db/seed_admin.sql
 Access_Data/
 Analyse/
+/docs

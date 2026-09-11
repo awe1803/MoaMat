@@ -1,5 +1,10 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/MoaMat.Domain/MoaMat.Domain.csproj" />
+    <Project Path="src/MoaMat.Infrastructure/MoaMat.Infrastructure.csproj" />
     <Project Path="src/MoaMat.Web/MoaMat.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/MoaMat.UnitTests/MoaMat.UnitTests.csproj" />
   </Folder>
 </Solution>

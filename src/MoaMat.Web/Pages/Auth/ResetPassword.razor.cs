@@ -1,60 +1,74 @@
-using System.ComponentModel.DataAnnotations;
+using Microsoft.AspNetCore.Components;
+using MoaMat.Domain.Authentication;
+using MoaMat.Web.Pages.Auth.Models;
 
 namespace MoaMat.Web.Pages.Auth;
 
-public partial class ResetPassword
+/// <summary>
+/// Password reset screen, reached from the recovery e-mail.
+/// </summary>
+/// <remarks>
+/// The link carries the tokens in the URL fragment
+/// (<c>#access_token=...&amp;type=recovery</c>). The session has to be
+/// established from them before a new password can be set, which is why the
+/// screen starts in <see cref="ResetPasswordStage.Checking"/>.
+/// </remarks>
+public partial class ResetPassword : ComponentBase
 {
-    private enum Stage { Checking, LinkInvalid, Form, Done }
+    private readonly NewPasswordInput _model = new();
 
-    private readonly NewPassword _model = new();
-    private Stage _stage = Stage.Checking;
-    private bool _busy;
+    private ResetPasswordStage _stage = ResetPasswordStage.Checking;
+    private bool _isBusy;
     private string? _error;
 
+    [Inject]
+    private IAuthenticationService Authentication { get; set; } = default!;
+
+    [Inject]
+    private NavigationManager Navigation { get; set; } = default!;
+
+    /// <inheritdoc />
     protected override async Task OnInitializedAsync()
     {
-        // Le lien de l'e-mail renvoie ici avec les jetons dans le fragment
-        // (#access_token=…&type=recovery). On établit la session avant de
-        // permettre la saisie du nouveau mot de passe.
-        if (Auth.IsSignedIn)
+        if (Authentication.IsSignedIn)
         {
-            _stage = Stage.Form;
+            _stage = ResetPasswordStage.Form;
             return;
         }
 
-        var result = await Auth.EstablishSessionFromUrlAsync();
-        _stage = result.Succeeded ? Stage.Form : Stage.LinkInvalid;
+        var result = await Authentication.EstablishSessionFromCallbackAsync();
+        _stage = result.Succeeded ? ResetPasswordStage.Form : ResetPasswordStage.LinkInvalid;
         _error = result.Succeeded ? null : result.Error;
     }
 
     private async Task SubmitAsync()
     {
-        _busy = true;
+        if (_isBusy)
+        {
+            return;
+        }
+
+        _isBusy = true;
         _error = null;
 
-        var result = await Auth.UpdatePasswordAsync(_model.Password);
-
-        _busy = false;
-
-        if (result.Succeeded)
+        try
         {
-            _stage = Stage.Done;
+            var result = await Authentication.UpdatePasswordAsync(_model.Password);
+
+            if (result.Succeeded)
+            {
+                _stage = ResetPasswordStage.Done;
+            }
+            else
+            {
+                _error = result.Error;
+            }
         }
-        else
+        finally
         {
-            _error = result.Error;
+            _isBusy = false;
         }
     }
 
-    private void GoToApp() => Navigation.NavigateTo("", replace: true);
-
-    private sealed class NewPassword
-    {
-        [Required(ErrorMessage = "Mot de passe requis.")]
-        [MinLength(8, ErrorMessage = "8 caractères minimum.")]
-        public string Password { get; set; } = "";
-
-        [Compare(nameof(Password), ErrorMessage = "Les mots de passe ne correspondent pas.")]
-        public string Confirm { get; set; } = "";
-    }
+    private void GoToApplication() => Navigation.NavigateTo(string.Empty, replace: true);
 }
