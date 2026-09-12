@@ -16,8 +16,10 @@
             <h1>Comptes utilisateurs</h1>
             <div class="sub">
                 Attribution des rôles et activation des comptes. Chaque changement est
-                inscrit au <a href="journal-audit">journal d'audit</a>. Un compte n'est
-                jamais supprimé — uniquement désactivé.
+                inscrit au <a href="journal-audit">journal d'audit</a>. Un compte est
+                normalement désactivé, jamais supprimé ; la suppression définitive
+                (réservée au super-administrateur) n'est prévue qu'en cas de départ du
+                club.
             </div>
         </div>
 
@@ -52,6 +54,7 @@
                             <th>État</th>
                             <th>Dernière connexion (UTC)</th>
                             <th>Créé le</th>
+                            <th>Suppression</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -60,6 +63,10 @@
                             <tr class="@(account.IsDisabled ? "row-off" : null)">
                                 <td>
                                     @account.Email
+                                    @if (account.IsPending)
+                                    {
+                                        <span class="badge off">en attente</span>
+                                    }
                                     @if (!_policy.CanChangeRoleOf(account) && !_policy.CanChangeActivationOf(account))
                                     {
                                         <span class="badge off">protégé</span>
@@ -70,6 +77,10 @@
                                             @onchange="e => ChangeRoleAsync(account, e.Value as string)"
                                             disabled="@(!_policy.CanChangeRoleOf(account))"
                                             aria-label="@($"Rôle de {account.Email}")">
+                                        @if (account.IsPending)
+                                        {
+                                            <option value="@AppRole.Pending.Code" disabled>en attente — non affecté</option>
+                                        }
                                         @foreach (var role in AppRole.Assignable)
                                         {
                                             <option value="@role.Code" disabled="@(!_policy.CanAssignRole(role))">
@@ -95,6 +106,32 @@
                                 </td>
                                 <td class="mono">@Timestamps.Minute(account.LastSignInAt)</td>
                                 <td class="mono">@Timestamps.Day(account.CreatedAt)</td>
+                                <td class="cell-danger">
+                                    @if (_policy.CanDeleteAccount(account))
+                                    {
+                                        @if (_pendingDeleteId == account.UserId)
+                                        {
+                                            <span class="msg-muted">Suppression définitive, irréversible.</span>
+                                            <button type="button" class="btn btn-sm danger"
+                                                    @onclick="() => DeleteAccountAsync(account)"
+                                                    disabled="@_isBusy">
+                                                Confirmer
+                                            </button>
+                                            <button type="button" class="btn btn-sm"
+                                                    @onclick="CancelDelete" disabled="@_isBusy">
+                                                Annuler
+                                            </button>
+                                        }
+                                        else
+                                        {
+                                            <button type="button" class="btn btn-sm danger"
+                                                    @onclick="() => RequestDelete(account)"
+                                                    disabled="@_isBusy">
+                                                Supprimer
+                                            </button>
+                                        }
+                                    }
+                                </td>
                             </tr>
                         }
                     </tbody>
@@ -102,7 +139,11 @@
             </div>
             <p class="count-foot">
                 @_accounts.Count compte(s). « CA » = compte au rôle <code>lecture</code> ;
-                sa désactivation est réservée au super-administrateur.
+                sa désactivation est réservée au super-administrateur. Un compte
+                <strong>en attente</strong> vient de s'inscrire et n'a aucun accès :
+                choisir un rôle ci-dessus l'active. La suppression est
+                <strong>définitive</strong> et réservée au super-administrateur (départ
+                du club) ; un compte super-administrateur ne peut jamais être supprimé.
             </p>
         }
     </Authorized>

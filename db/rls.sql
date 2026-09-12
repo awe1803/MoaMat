@@ -116,6 +116,14 @@ end $$;
 --     modifier sa propre ligne (anti-élévation). La suppression de la ligne
 --     d'un compte « CA » (rôle lecture) est elle aussi réservée au super-admin
 --     (role.assign_admin) : un admin ne peut pas « révoquer » un compte CA.
+--
+--     Compte « en_attente » (rôle par défaut à l'inscription) : la policy SELECT
+--     ci-dessous (user_id = auth.uid()) lui laisse voir SA PROPRE ligne, et rien
+--     d'autre — n'ayant aucune permission (db/permissions.sql), toutes les
+--     policies « has_permission(...) » du reste de ce fichier lui renvoient 0
+--     ligne sur toutes les autres tables. C'est la policy RLS dédiée à l'état
+--     « en attente » exigée par l'analyse fonctionnelle : aucun accès direct à
+--     l'application tant qu'un admin / super-admin n'a pas activé le compte.
 -- -----------------------------------------------------------------------------
 
 alter table public.utilisateur_role enable row level security;

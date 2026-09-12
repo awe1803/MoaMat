@@ -9,6 +9,7 @@ namespace MoaMat.UnitTests.Accounts;
 public sealed class AppRoleTests
 {
     [Theory]
+    [InlineData("en_attente", 0)]
     [InlineData("lecture", 1)]
     [InlineData("gestion", 2)]
     [InlineData("admin", 3)]
@@ -17,6 +18,16 @@ public sealed class AppRoleTests
     public void FromCode_recognises_every_known_role(string code, int expectedRank)
     {
         Assert.Equal(expectedRank, AppRole.FromCode(code).Rank);
+    }
+
+    [Fact]
+    public void FromCode_maps_the_pending_default_role_distinctly_from_no_role()
+    {
+        var pending = AppRole.FromCode("en_attente");
+
+        Assert.Equal(AppRole.Pending, pending);
+        Assert.NotEqual(AppRole.None, pending);
+        Assert.Equal(0, pending.Rank);
     }
 
     [Theory]
@@ -52,9 +63,10 @@ public sealed class AppRoleTests
     }
 
     [Fact]
-    public void Assignable_excludes_the_absent_role()
+    public void Assignable_excludes_the_absent_and_pending_roles()
     {
         Assert.DoesNotContain(AppRole.None, AppRole.Assignable);
+        Assert.DoesNotContain(AppRole.Pending, AppRole.Assignable);
         Assert.Equal(4, AppRole.Assignable.Count);
     }
 }

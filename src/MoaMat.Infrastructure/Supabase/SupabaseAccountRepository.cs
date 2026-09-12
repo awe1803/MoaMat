@@ -13,12 +13,17 @@ namespace MoaMat.Infrastructure.Supabase;
 /// <remarks>
 /// <para>The real arbitration happens in the database: the view filters on the
 /// permission <c>compte.read</c>, the RLS policies on
-/// <c>public.utilisateur_role</c> reject a forbidden role change, and
+/// <c>public.utilisateur_role</c> reject a forbidden role change,
 /// <c>public.set_compte_actif</c> raises <c>42501</c> for a forbidden
-/// activation change. This adapter only turns a refusal into a message.</para>
-/// <para>Both writes are naturally idempotent - assigning the role a user
-/// already holds, or deactivating an already deactivated account, converges on
-/// the same state and is safely replayable.</para>
+/// activation change, and <c>public.supprimer_compte</c> does the same for a
+/// forbidden deletion (in particular, a super-administrator account can never
+/// be deleted this way). This adapter only turns a refusal into a message.</para>
+/// <para>The role and activation writes are naturally idempotent - assigning
+/// the role a user already holds, or deactivating an already deactivated
+/// account, converges on the same state and is safely replayable. Deletion is
+/// not: replaying it against an already-deleted account fails (there is
+/// nothing left to delete), which is the correct, visible outcome for an
+/// irreversible operation.</para>
 /// </remarks>
 internal sealed class SupabaseAccountRepository : IAccountRepository
 {
@@ -27,6 +32,8 @@ internal sealed class SupabaseAccountRepository : IAccountRepository
         "Changement de rôle refusé (droits insuffisants ou compte protégé).";
     private const string ActivationRefusedMessage =
         "Changement d'état du compte refusé (droits insuffisants ou compte protégé).";
+    private const string DeletionRefusedMessage =
+        "Suppression refusée (droits insuffisants ou compte protégé).";
 
     private readonly global::Supabase.Client _client;
     private readonly SupabaseCallGuard _guard;
@@ -94,6 +101,19 @@ internal sealed class SupabaseAccountRepository : IAccountRepository
             {
                 ["p_user"] = userId,
                 ["p_actif"] = isActive,
+            }),
+            cancellationToken);
+
+    /// <inheritdoc />
+    public Task<OperationResult> DeleteAccountAsync(
+        Guid userId,
+        CancellationToken cancellationToken = default) =>
+        _guard.WriteAsync(
+            nameof(DeleteAccountAsync),
+            DeletionRefusedMessage,
+            () => _client.Rpc("supprimer_compte", new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                ["p_user"] = userId,
             }),
             cancellationToken);
 }

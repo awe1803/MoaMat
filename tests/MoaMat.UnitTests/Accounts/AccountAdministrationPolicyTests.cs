@@ -24,6 +24,7 @@ public sealed class AccountAdministrationPolicyTests
         Assert.False(policy.CanChangeRoleOf(AccountWith(AppRole.Reader)));
         Assert.False(policy.CanAssignRole(AppRole.Reader));
         Assert.False(policy.CanChangeActivationOf(AccountWith(AppRole.Manager)));
+        Assert.False(policy.CanDeleteAccount(AccountWith(AppRole.Reader)));
     }
 
     [Fact]
@@ -34,6 +35,7 @@ public sealed class AccountAdministrationPolicyTests
 
         Assert.False(policy.CanChangeRoleOf(self));
         Assert.False(policy.CanChangeActivationOf(self));
+        Assert.False(policy.CanDeleteAccount(self));
     }
 
     [Fact]
@@ -44,6 +46,26 @@ public sealed class AccountAdministrationPolicyTests
         Assert.False(policy.CanChangeRoleOf(AccountWith(AppRole.Administrator)));
         Assert.False(policy.CanChangeRoleOf(AccountWith(AppRole.SuperAdministrator)));
         Assert.False(policy.CanChangeActivationOf(AccountWith(AppRole.Administrator)));
+    }
+
+    [Fact]
+    public void An_administrator_can_never_delete_any_account()
+    {
+        var policy = new AccountAdministrationPolicy(ActorId, AppRole.Administrator);
+
+        Assert.False(policy.CanDeleteAccount(AccountWith(AppRole.Reader)));
+        Assert.False(policy.CanDeleteAccount(AccountWith(AppRole.Manager)));
+    }
+
+    [Fact]
+    public void A_super_administrator_can_delete_a_non_elevated_account_but_never_another_super_administrator()
+    {
+        var policy = new AccountAdministrationPolicy(ActorId, AppRole.SuperAdministrator);
+
+        Assert.True(policy.CanDeleteAccount(AccountWith(AppRole.Reader)));
+        Assert.True(policy.CanDeleteAccount(AccountWith(AppRole.Manager)));
+        Assert.True(policy.CanDeleteAccount(AccountWith(AppRole.Administrator)));
+        Assert.False(policy.CanDeleteAccount(AccountWith(AppRole.SuperAdministrator)));
     }
 
     [Fact]
@@ -76,5 +98,17 @@ public sealed class AccountAdministrationPolicyTests
         Assert.True(policy.CanChangeRoleOf(AccountWith(AppRole.Administrator)));
         Assert.True(policy.CanChangeActivationOf(AccountWith(AppRole.Reader)));
         Assert.True(policy.CanAssignRole(AppRole.SuperAdministrator));
+    }
+
+    [Fact]
+    public void An_administrator_can_activate_a_pending_account_by_assigning_it_a_role()
+    {
+        var policy = new AccountAdministrationPolicy(ActorId, AppRole.Administrator);
+        var pending = AccountWith(AppRole.Pending);
+
+        Assert.True(pending.IsPending);
+        Assert.False(pending.IsElevated);
+        Assert.True(policy.CanChangeRoleOf(pending));
+        Assert.True(policy.CanAssignRole(AppRole.Reader));
     }
 }

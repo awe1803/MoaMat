@@ -22,6 +22,19 @@ public interface IAuthenticationService
     Task<OperationResult> SignInAsync(string email, string password, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Registers a new account. This only starts the sign-up - it never signs
+    /// the caller in and never grants application access by itself: the
+    /// account is created with the database default role <c>en_attente</c>
+    /// (see <c>db/roles.sql</c>), which holds no permission at all until an
+    /// administrator explicitly activates it and assigns a real role (see
+    /// <c>public.set_compte_actif</c> / <c>public.utilisateur_role</c>).
+    /// </summary>
+    /// <param name="email">Login address; leading and trailing spaces are ignored.</param>
+    /// <param name="password">Plain-text password, never logged nor persisted.</param>
+    /// <param name="cancellationToken">Cancels the pending request.</param>
+    Task<OperationResult> SignUpAsync(string email, string password, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Signs the current user out. Best effort: the local session is dropped
     /// even if the provider cannot be reached, so this never throws.
     /// </summary>
