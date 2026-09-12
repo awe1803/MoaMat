@@ -58,8 +58,7 @@ create table if not exists public.item_transition (
     -- Organisme de contrôle / CA / Gestionnaire matériel — obligatoire pour
     -- toute transition VERS un statut terminal (cf. trigger ci-dessous) ;
     -- NULL pour une transition non terminale.
-    autorite_decision text check (autorite_decision is null
-                                   or autorite_decision in ('organisme_controle', 'ca', 'gestionnaire_materiel')),
+    autorite_decision public.statut_autorite_t,
     -- Chemin Supabase Storage de la pièce justificative (obligatoire pour
     -- Perdu / Volé) — pas de bucket dédié ici : réutilise le même modèle que
     -- db/storage.sql (chemin texte, résolution/permissions côté bucket).

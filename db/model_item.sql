@@ -48,6 +48,31 @@
 
 begin;
 
+-- Domaine partagé pour item.statut_autorite : SOURCE UNIQUE de la liste de
+-- valeurs autorisées, référencée à la fois par la CREATE TABLE (base neuve)
+-- et par le rattrapage ALTER TABLE (base déjà provisionnée) plus bas. Sans ce
+-- domaine, les deux CHECK dupliqueraient la même liste verbatim et pourraient
+-- diverger silencieusement si l'une des deux est mise à jour sans l'autre.
+-- `create domain` n'a pas de variante IF NOT EXISTS : on teste son existence
+-- dans le catalogue pour rester rejouable.
+do $$
+begin
+    if not exists (
+        select 1
+        from pg_type t
+        join pg_namespace n on n.oid = t.typnamespace
+        where n.nspname = 'public'
+          and t.typname = 'statut_autorite_t'
+    ) then
+        create domain public.statut_autorite_t as text
+            check (value is null
+                   or value in ('organisme_controle', 'ca', 'gestionnaire_materiel'));
+    end if;
+end $$;
+
+comment on domain public.statut_autorite_t is
+    'Autorité décisionnaire d''une transition de statut item. Source unique de la liste de valeurs (évite la duplication du CHECK entre la définition de la table et son rattrapage pour les bases déjà provisionnées).';
+
 -- Sur un REJEU, public.v_item dépend déjà de public.v_lieu_contenant et de
 -- public.v_code_club_ambigu (sections 2 et 7 ci-dessous) : la droper d'abord
 -- évite un "cannot drop view ... because other objects depend on it" quand ce
@@ -207,9 +232,7 @@ create table if not exists public.item (
     statut_motif           text,
     statut_date_effet      date,
     statut_piece_jointe_url text,
-    statut_autorite        text
-                      check (statut_autorite is null
-                             or statut_autorite in ('organisme_controle', 'ca', 'gestionnaire_materiel')),
+    statut_autorite        public.statut_autorite_t,
 
     lieu_contenant_id bigint references public.lieu_contenant (id) on delete set null,
     destination       text,
@@ -236,6 +259,19 @@ create table if not exists public.item (
 
     unique (origine_table, origine_id)
 );
+
+-- Rattrapage pour une base déjà provisionnée AVANT que ces colonnes
+-- n'existent : "create table if not exists" ci-dessus ne les ajoute pas à une
+-- table déjà présente. Sans ce bloc, un rejeu de ce fichier sur une base plus
+-- ancienne que db/item_etat.sql laisse item.statut_motif / statut_date_effet /
+-- statut_piece_jointe_url / statut_autorite absentes, et tout ce qui en
+-- dépend (tg_item_valider_transition_statut, item_bouteille_appliquer_hors_validite…)
+-- échoue avec "column does not exist".
+alter table public.item
+    add column if not exists statut_motif text,
+    add column if not exists statut_date_effet date,
+    add column if not exists statut_piece_jointe_url text,
+    add column if not exists statut_autorite public.statut_autorite_t;
 
 comment on table  public.item                  is 'Entité de base commune à toutes les familles de matériel (class-table inheritance). Voir db/MODELE.md.';
 comment on column public.item.id               is 'Vraie clé technique : GENERATED ALWAYS AS IDENTITY. Jamais fournie, jamais réutilisée, non modifiable.';

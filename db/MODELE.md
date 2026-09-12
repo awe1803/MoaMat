@@ -47,8 +47,9 @@ Access CSV ─► [schema.sql + initial_load.sql]      staging (miroir, inchang�
 | 7 | `rls.sql`            | policies RLS (tables `item*` / `lieu*` / `ref_statut` incluses) |
 | 8 | `audit.sql`          | journal + trigger statut terminal sur `item` |
 | 9 | **`item_etat.sql`**  | **machine à états : historique décisionnaire, verrouillage terminal, disponibilité calculée — voir `MODELE.md` §9** |
-| 10 | `comptes.sql`       | écran /comptes |
-| 11 | `storage.sql`       | buckets Storage |
+| 10 | **`item_bouteille.sql`** | **moteur métier Bouteilles : référentiels réglementaire/tarifaire datés, échéances à deux compteurs, bascule automatique — voir `MODELE.md` §10** |
+| 11 | `comptes.sql`       | écran /comptes |
+| 12 | `storage.sql`       | buckets Storage |
 
 ### Transition / repli
 
@@ -275,3 +276,97 @@ encore posé sur le modèle Item, cf. §1 : le miroir ne change pas).
 
 Exposée uniquement en lecture, via `public.v_item.disponible` — jamais une
 colonne éditable.
+
+---
+
+## 10. Moteur métier Bouteilles ([`db/item_bouteille.sql`](item_bouteille.sql))
+
+Fusion des tickets *modèle bouteille*, *référentiel réglementaire*,
+*référentiel tarifaire* et *moteur d'échéances*. Les valeurs initiales ne sont
+pas inventées : le miroir Access porte déjà les **6 profils** réglementaires
+réels (`public.ref_regle_requalification` : Plongée ACIER, Plongée ALU,
+Plongée Carbonne, Deco O², O² Secourisme, Tampons) et les tarifs Apragaz
+2023-2026 (`public.ref_tarif_requalification`). Ce fichier construit la
+couche normalisée et administrable par-dessus, sur le principe déjà posé par
+`model_item.sql` — le miroir ne change pas.
+
+### 10.1 Classification (`public.item_bouteille`)
+
+Deux colonnes distinguent les 6 profils réglementaires : `famille`
+(`plongee` / `deco_o2` / `o2_secourisme` / `bloc_tampon`, le champ métier du
+ticket) et `matiere` (`acier` / `alu` / `carbone`, pertinente seulement pour
+`famille = 'plongee'` : les trois autres familles ont une périodicité propre,
+indépendante de la matière). `etat_robinetterie` est un champ texte simple —
+**volontairement pas une entité séparée** (Q2.1). Le résolveur
+`public.bouteille_type_referentiel(famille, matiere)` retombe sur l'un des 6
+codes réglementaires (`plongee_acier`, `plongee_alu`, `plongee_carbone`,
+`deco_o2`, `o2_secourisme`, `bloc_tampon`) ; il est reproduit en C# pur
+(`MoaMat.Domain.Cylinders.CylinderReferenceType`) pour rester testable hors
+base de données.
+
+### 10.2 Référentiels administrables et DATÉS
+
+`public.ref_periodicite_bouteille` (périodicité en mois par type × contrôle)
+et `public.ref_tarif_apragaz` (RR / hydraulique huile / hydraulique eau)
+suivent tous les deux le principe d'historisation **append-only** déjà
+utilisé pour `public.item_transition` (§9.2) : « modifier » une valeur, c'est
+insérer une nouvelle ligne avec un `date_effet` plus récent — rien n'est
+jamais écrasé, et des triggers `BEFORE UPDATE`/`BEFORE DELETE` refusent toute
+modification, y compris pour un rôle admin. La lecture (`referentiel.read`)
+et l'écriture (`referentiel.create`, admin+) réutilisent le même domaine de
+permission que `ref_statut` / `lieu_*`.
+
+Les tarifs hydraulique huile / hydraulique eau restent deux lignes
+**distinctes** à dessein : l'écart entre les deux (de l'ordre de 13 à 15 €
+selon les années, visible dans les valeurs reprises de
+`ref_tarif_requalification`) est une donnée réelle du référentiel Apragaz, pas
+une erreur de saisie — les fusionner ou les moyenner ferait disparaître cette
+distinction.
+
+### 10.3 Moteur à deux compteurs indépendants
+
+`public.item_bouteille` porte deux compteurs, alimentés indépendamment :
+`date_dernier_controle_optique` et `date_dernier_controle_hydraulique`.
+`public.bouteille_echeance(type, controle, dernier_controle)` calcule
+l'échéance d'**un seul** compteur à la fois (dernier contrôle + périodicité en
+vigueur à cette date) — il n'y a aucune alternance codée en dur entre optique
+et hydraulique : l'absence de ligne réglementaire pour un couple donne
+simplement une échéance `NULL` (ex. carbone n'a pas de contrôle optique).
+`public.v_item_bouteille` expose les deux échéances plus `echeance_min` (la
+plus proche des deux, `NULL` seulement si les deux le sont).
+
+Un trigger `AFTER INSERT/UPDATE` sur `item_bouteille` recopie `echeance_min`
+dans `public.item.date_echeance`, pour que `public.item_est_disponible()`
+(§9.4) et les filtres existants « par échéance » restent corrects sans
+dupliquer le calcul côté client.
+
+### 10.4 Bascule automatique en « Hors validité » (R2.3)
+
+`public.item_bouteille_appliquer_hors_validite()` fait passer au statut
+`hors_validite` (déjà présent dans `public.ref_statut`, non terminal) toute
+bouteille active dont `echeance_min` est dépassée et dont le statut est
+`en_stock`, `en_attente_controle` ou `prete`. **Volontairement exclues** :
+`en_maintenance` et `en_controle` — une bouteille déjà prise en charge par un
+workflow actif garde ce statut même si son ancienne échéance est dépassée, la
+bascule automatique ne l'écrase pas ; et les statuts déjà `hors_validite` ou
+terminaux, qui ne sont de toute façon pas dans la liste blanche. Ce passage se
+fait via un simple `UPDATE ... SET statut_code = 'hors_validite'` sur
+`public.item` : il traverse donc le trigger existant
+`public.tg_item_valider_transition_statut` (§9.2), qui exige motif et date
+d'effet (fournis par la fonction) et journalise la transition dans
+`item_transition`/`audit_log` — **sans dupliquer la logique de transition**.
+Planifiée quotidiennement via `pg_cron` quand l'extension est disponible
+(no-op sinon, pour rester rejouable en local/CI) ; peut aussi être appelée
+directement pour un rattrapage manuel ou en test.
+
+La fonction est `SECURITY DEFINER` et contourne entièrement la policy RLS
+`item_upd` (aucune vérification de `item.update`) : son `EXECUTE` est donc
+**révoqué de `public`/`authenticated`/`anon`** et réservé à `service_role`
+(rattrapage manuel côté serveur) — `pg_cron` l'invoque de toute façon en tant
+que propriétaire de la fonction, qui a toujours le droit de l'exécuter. Même
+garde que `public.custom_access_token_hook` (§4, `db/roles.sql`) : sans ce
+`revoke`, PostgreSQL accorde `EXECUTE` à `PUBLIC` par défaut à la création
+d'une fonction, ce qui aurait permis à n'importe quel compte authentifié de
+forcer le statut de n'importe quelle bouteille.
+
+Tests : [`db/tests/item_bouteille_tests.sql`](tests/item_bouteille_tests.sql).
