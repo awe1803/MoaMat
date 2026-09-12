@@ -24,6 +24,7 @@ internal static class InventoryItemMapper
         StatusCode = record.StatutCode,
         StatusLabel = record.StatutLibelle,
         IsStatusTerminal = record.StatutTerminal,
+        IsAvailable = record.Disponible,
         ContainerId = record.LieuContenantId,
         LocationPath = record.LieuChemin,
         Destination = record.Destination,

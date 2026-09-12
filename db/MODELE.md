@@ -46,8 +46,9 @@ Access CSV ─► [schema.sql + initial_load.sql]      staging (miroir, inchang�
 | 6 | **`transform_item.sql`** | **reprise miroir → Item (rejouable)** |
 | 7 | `rls.sql`            | policies RLS (tables `item*` / `lieu*` / `ref_statut` incluses) |
 | 8 | `audit.sql`          | journal + trigger statut terminal sur `item` |
-| 9 | `comptes.sql`        | écran /comptes |
-| 10 | `storage.sql`       | buckets Storage |
+| 9 | **`item_etat.sql`**  | **machine à états : historique décisionnaire, verrouillage terminal, disponibilité calculée — voir `MODELE.md` §9** |
+| 10 | `comptes.sql`       | écran /comptes |
+| 11 | `storage.sql`       | buckets Storage |
 
 ### Transition / repli
 
@@ -204,3 +205,73 @@ sécurité. La sécurité effective est portée par les **policies RLS**
 `referentiel.*` ; `item_reject` → `item.read` en lecture seule. Les services ne
 font que **structurer les appels** PostgREST (filtres, projections, désactivation
 logique).
+
+---
+
+## 9. Machine à états / disponibilité calculée / historique décisionnaire ([`db/item_etat.sql`](item_etat.sql))
+
+Fusion des tickets *machine à états*, *calcul de disponibilité* et
+*historique décisionnaire*. Principe directeur (A16) : **le statut — et donc
+la disponibilité — est calculé, jamais saisi**. Aucune case à cocher manuelle
+de disponibilité n'existe nulle part dans le modèle.
+
+### 9.1 Catalogue de statuts (`ref_statut`, posé par `model_item.sql`)
+
+`en_stock`, `prete`, `en_controle`, `en_attente_controle`, `en_maintenance`,
+`hors_validite` (non terminaux), puis **trois statuts terminaux** :
+`retire_du_service`, `perdu`, `vole`.
+
+`retire_du_service` **fusionne** les trois anciens statuts « déclassé / écarté
+/ rebuté » (Q7bis.1) : un seul enregistrement par objet retiré, pas de tables
+dupliquées. `perdu` et `vole` restent distincts (assurance, plainte).
+
+### 9.2 Transition de statut : comment l'appli l'appelle
+
+Il n'y a pas de RPC dédiée : le client envoie, dans le **même** `UPDATE`
+PostgREST que `statut_code`, les colonnes transitoires de `public.item` :
+`statut_motif` (obligatoire), `statut_date_effet` (obligatoire),
+`statut_piece_jointe_url` (obligatoire pour `perdu` / `vole` — chemin
+Supabase Storage), `statut_autorite` (obligatoire pour une transition VERS un
+statut terminal — `organisme_controle` | `ca` | `gestionnaire_materiel`).
+
+Le trigger `public.tg_item_valider_transition_statut` (BEFORE UPDATE OF
+`statut_code`) valide ces règles, écrit une ligne dans
+`public.item_transition` (historique append-only, comme `audit_log`), puis
+remet les colonnes transitoires à `NULL` : ce ne sont pas des champs d'état
+durable, seulement le véhicule de la transition demandée.
+
+### 9.3 Irréversibilité des statuts terminaux (R7bis.1)
+
+Imposée **à la fois** :
+- par le **trigger** ci-dessus (refuse tout changement depuis un statut
+  terminal sans la permission `status.terminal.override`) ;
+- par la **policy RLS** `item_upd` (remplace la policy générique posée par
+  `db/rls.sql` pour la seule table `item`) : `USING` exige en plus
+  `status.terminal.override` dès lors que la ligne ciblée est déjà dans un
+  statut terminal. Entrer dans un statut terminal reste une transition
+  normale (rôle `gestion`+) ; seul le retour — ou toute autre modification
+  après coup — est verrouillé.
+
+Le passage par un Super-admin/Admin est journalisé deux fois : dans
+`audit_log` (trigger générique déjà existant sur `item.statut_code`,
+`db/audit.sql`) et dans `item_transition` (autorité décisionnaire, motif,
+pièce jointe).
+
+### 9.4 Disponibilité calculée (`public.item_est_disponible()`)
+
+Combine : `actif` × `statut_code = 'en_stock'` × échéance non dépassée × pas
+de prêt ouvert. Volontairement **défensif** plutôt que redondant avec le
+statut : les autres statuts (`en_maintenance`, `en_controle`,
+`en_attente_controle`, statuts terminaux…) le rendent déjà indisponible, mais
+la fonction revérifie aussi l'échéance et le prêt pour couvrir une dérive de
+données (statut resté « en stock » alors que l'échéance est dépassée ou
+qu'un prêt reste ouvert) — précisément le type de contradiction relevé par
+les constats d'audit **A15 / A16 / A20** sur les données existantes (voir
+[`db/tests/item_etat_tests.sql`](tests/item_etat_tests.sql)).
+
+Le prêt en cours est détecté via `public.item_a_pret_en_cours()`, qui **ponte**
+vers le miroir `public.pret` (par `code_club` — aucun module « prêt » n'est
+encore posé sur le modèle Item, cf. §1 : le miroir ne change pas).
+
+Exposée uniquement en lecture, via `public.v_item.disponible` — jamais une
+colonne éditable.

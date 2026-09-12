@@ -56,6 +56,8 @@ db/model_item.sql       Modèle métier « Item » : entité de base + spéciali
 db/transform_item.sql   Reprise « miroir Access -> modèle Item » (rejouable)
 db/rls.sql              Policies RLS explicites sur toutes les tables
 db/audit.sql            Journal d'audit append-only + triggers
+db/item_etat.sql        Machine à états item : transitions, historique décisionnaire,
+                        verrouillage des statuts terminaux, disponibilité calculée
 db/comptes.sql          Vue + RPC de l'écran /comptes
 db/storage.sql          Buckets Supabase Storage + policies d'accès par rôle
 db/tests/rls_tests.sql  Tests de sécurité RLS / rôles / audit (non destructif)
@@ -252,9 +254,14 @@ Dans l'éditeur SQL Supabase (ou via `psql`), exécuter **dans l'ordre** :
    tables (miroir + modèle Item) ; supprime la policy permissive `moamat_dev_all`.
 8. [`db/audit.sql`](db/audit.sql) — journal `public.audit_log` append-only et
    triggers sur les tables sensibles (dont `item.statut_code` terminal).
-9. [`db/comptes.sql`](db/comptes.sql) — vue `public.compte_utilisateur` et RPC
-   `public.set_compte_actif` de l'écran /comptes.
-10. [`db/storage.sql`](db/storage.sql) — buckets Supabase Storage
+9. [`db/item_etat.sql`](db/item_etat.sql) — machine à états de l'item :
+   historique décisionnaire `public.item_transition` (append-only), trigger de
+   validation des transitions (motif/date obligatoires, pièce jointe
+   Perte/Vol, irréversibilité des statuts terminaux, autorité décisionnaire),
+   verrouillage RLS symétrique de `item_upd`.
+10. [`db/comptes.sql`](db/comptes.sql) — vue `public.compte_utilisateur` et RPC
+    `public.set_compte_actif` de l'écran /comptes.
+11. [`db/storage.sql`](db/storage.sql) — buckets Supabase Storage
     (`materiel-photos`, `certificats-requalification`, `factures`, tous privés)
     et policies d'accès par rôle sur `storage.objects`. Ré-exécutable.
 

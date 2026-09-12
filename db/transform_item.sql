@@ -157,10 +157,10 @@ select
     b.date_mise_en_service,
     null,
     case
-        when b.est_declassee   then 'declasse'
-        when b.a_requalifier   then 'a_requalifier'
-        when b.a_controler     then 'a_controler'
-        else 'en_service'
+        when b.est_declassee   then 'retire_du_service'
+        when b.a_requalifier   then 'en_attente_controle'
+        when b.a_controler     then 'en_attente_controle'
+        else 'en_stock'
     end,
     coalesce(pg_temp.contenant_for('bouteille.site', b.site),
              pg_temp.contenant_for('bouteille.local', b.local)),
@@ -184,7 +184,7 @@ select
     nullif(btrim(b.modele), ''),
     b.date_mise_en_service,
     null,
-    case when b.est_declassee then 'declasse' else 'reforme' end,
+    'retire_du_service',
     pg_temp.contenant_for('bouteille_sortie.site', b.site),
     null,
     nullif(btrim(b.remarque), ''),
@@ -272,7 +272,7 @@ select
     nullif(btrim(d.modele_premier_etage), ''),
     d.date_achat,
     null,
-    case when d.est_declasse then 'declasse' else 'en_service' end,
+    case when d.est_declasse then 'retire_du_service' else 'en_stock' end,
     pg_temp.contenant_for('detendeur.section', d.section),
     null,
     nullif(btrim(d.remarque), ''),
@@ -294,7 +294,7 @@ select
     nullif(btrim(d.modele_premier_etage), ''),
     d.date_achat,
     null,
-    case when d.est_declasse then 'declasse' else 'reforme' end,
+    'retire_du_service',
     pg_temp.contenant_for('detendeur_sortie.section', d.section),
     null,
     nullif(btrim(d.remarque), ''),
@@ -377,9 +377,9 @@ select
     g.date_achat,
     null,
     case
-        when g.est_declasse then 'declasse'
-        when g.est_manquant then 'manquant'
-        else 'en_service'
+        when g.est_declasse then 'retire_du_service'
+        when g.est_manquant then 'perdu'
+        else 'en_stock'
     end,
     coalesce(pg_temp.contenant_for('gilet.section', g.section),
              pg_temp.contenant_for('gilet.emplacement_remarque', g.emplacement_remarque)),
@@ -403,7 +403,7 @@ select
     null,
     g.date_achat,
     null,
-    case when g.est_declasse then 'declasse' else 'reforme' end,
+    'retire_du_service',
     pg_temp.contenant_for('gilet_sortie.section', g.section),
     null,
     nullif(btrim(g.emplacement_remarque), ''),
@@ -451,7 +451,7 @@ select
     nullif(btrim(p.modele), ''),
     p.date_achat,
     p.prix_tvac_eur,
-    case when p.est_declasse then 'declasse' else 'en_service' end,
+    case when p.est_declasse then 'retire_du_service' else 'en_stock' end,
     coalesce(pg_temp.contenant_for('petit_materiel.local', p.local),
              pg_temp.contenant_for('petit_materiel.section', p.section)),
     null,
@@ -489,7 +489,7 @@ select
     nullif(btrim(m.modele), ''),
     m.date_achat,
     null,
-    case when m.est_declasse then 'declasse' else 'en_service' end,
+    case when m.est_declasse then 'retire_du_service' else 'en_stock' end,
     pg_temp.contenant_for('materiel_didactique.site', rs.libelle),
     null,
     null,
@@ -523,7 +523,7 @@ select
     null,
     null,
     p.prix_unitaire_eur,
-    'en_service',
+    'en_stock',
     pg_temp.contenant_for('piece_detachee.emplacement', p.emplacement),
     nullif(btrim(p.destination), ''),
     nullif(btrim(p.utilisation), ''),

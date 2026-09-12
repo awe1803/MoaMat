@@ -219,21 +219,58 @@ internal sealed class SupabaseInventoryRepository : IInventoryRepository
     /// <inheritdoc />
     public Task<OperationResult> SetItemStatusAsync(
         long itemId,
-        string statusCode,
+        StatusTransitionRequest transition,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(statusCode))
+        ArgumentNullException.ThrowIfNull(transition);
+
+        if (string.IsNullOrWhiteSpace(transition.StatusCode) || string.IsNullOrWhiteSpace(transition.Reason))
         {
-            return Task.FromResult(OperationResult.Failure("Statut inconnu : changement refusé."));
+            return Task.FromResult(OperationResult.Failure("Statut ou motif manquant : changement refusé."));
         }
 
+        // The four statut_* columns below travel in the SAME update as
+        // statut_code: public.tg_item_valider_transition_statut (db/item_etat.sql)
+        // validates them and resets them to NULL once the transition is recorded.
         return _guard.WriteAsync(
             nameof(SetItemStatusAsync),
             StatusRefusedMessage,
             () => _client.From<ItemRecord>()
                 .Where(record => record.Id == itemId)
-                .Set(record => record.StatutCode, statusCode)
+                .Set(record => record.StatutCode, transition.StatusCode)
+                .Set(record => record.StatutMotif!, transition.Reason)
+                .Set(record => record.StatutDateEffet!, SqlDateConverter.ToDateTime(transition.EffectiveOn))
+                .Set(record => record.StatutPieceJointeUrl!, transition.AttachmentUrl)
+                .Set(record => record.StatutAutorite!, ToAutoriteCode(transition.Authority))
                 .Update(cancellationToken: cancellationToken),
             cancellationToken);
     }
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<ItemStatusTransition>> GetStatusHistoryAsync(
+        long itemId,
+        CancellationToken cancellationToken = default) =>
+        _guard.ReadAsync(
+            nameof(GetStatusHistoryAsync),
+            ReadFailureMessage,
+            async () =>
+            {
+                var response = await _client.From<ItemStatusTransitionRecord>()
+                    .Filter("item_id", Constants.Operator.Equals, itemId)
+                    .Order("cree_le", Constants.Ordering.Descending)
+                    .Get(cancellationToken)
+                    .ConfigureAwait(false);
+
+                return (IReadOnlyList<ItemStatusTransition>)[.. response.Models.Select(ItemStatusTransitionMapper.ToDomain)];
+            },
+            cancellationToken);
+
+    /// <summary>Matches the <c>statut_autorite</c> check constraint in <c>db/model_item.sql</c>.</summary>
+    private static string? ToAutoriteCode(TransitionAuthority? authority) => authority switch
+    {
+        TransitionAuthority.OrganismeControle => "organisme_controle",
+        TransitionAuthority.Ca => "ca",
+        TransitionAuthority.GestionnaireMateriel => "gestionnaire_materiel",
+        _ => null,
+    };
 }

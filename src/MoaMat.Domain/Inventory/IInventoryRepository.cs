@@ -61,14 +61,25 @@ public interface IInventoryRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Changes an item status. Leaving a terminal status is arbitrated by the
-    /// database (permission <c>status.terminal.override</c>) and audited.
+    /// Changes an item status. The database rejects the change outright when
+    /// <paramref name="transition"/> is missing a reason or an effective date,
+    /// when the target status is <c>perdu</c>/<c>vole</c> with no attachment,
+    /// or when it enters a terminal status with no deciding authority. Leaving
+    /// a terminal status is further arbitrated by the database (permission
+    /// <c>status.terminal.override</c>) and is audited either way.
     /// </summary>
     /// <param name="itemId">Item identifier.</param>
-    /// <param name="statusCode">Target status code.</param>
+    /// <param name="transition">Target status plus the mandatory reason for the change.</param>
     /// <param name="cancellationToken">Cancels the pending request.</param>
     Task<OperationResult> SetItemStatusAsync(
         long itemId,
-        string statusCode,
+        StatusTransitionRequest transition,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Decision history of an item's status changes, most recent first.</summary>
+    /// <param name="itemId">Item identifier.</param>
+    /// <param name="cancellationToken">Cancels the pending request.</param>
+    Task<IReadOnlyList<ItemStatusTransition>> GetStatusHistoryAsync(
+        long itemId,
         CancellationToken cancellationToken = default);
 }

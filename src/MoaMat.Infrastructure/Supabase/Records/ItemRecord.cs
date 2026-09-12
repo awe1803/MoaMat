@@ -42,6 +42,25 @@ internal sealed class ItemRecord : BaseModel
     [Column("statut_code")]
     public string StatutCode { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Transition-input columns: read as write-only carriers for the current
+    /// request, validated and consumed by <c>public.tg_item_valider_transition_statut</c>
+    /// (<c>db/item_etat.sql</c>), which resets them to <c>NULL</c> once recorded.
+    /// Left unset (<c>null</c>) on a plain field update — only <see cref="StatutCode"/>
+    /// changing triggers the validation.
+    /// </summary>
+    [Column("statut_motif")]
+    public string? StatutMotif { get; set; }
+
+    [Column("statut_date_effet")]
+    public DateTime? StatutDateEffet { get; set; }
+
+    [Column("statut_piece_jointe_url")]
+    public string? StatutPieceJointeUrl { get; set; }
+
+    [Column("statut_autorite")]
+    public string? StatutAutorite { get; set; }
+
     [Column("lieu_contenant_id")]
     public long? LieuContenantId { get; set; }
 
