@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
+using MoaMat.Domain.Accounts;
 using MoaMat.Domain.Common;
 using MoaMat.Domain.Inventory;
 using MoaMat.Web.Navigation;
@@ -21,9 +22,14 @@ public partial class Home : ComponentBase
     private IReadOnlyCollection<string> _families = [];
     private bool _isBusy = true;
     private string? _error;
+    private int _pendingAccounts;
+    private bool _canAdministerAccounts;
 
     [Inject]
     private IInventoryRepository Items { get; set; } = default!;
+
+    [Inject]
+    private IAccountRepository Accounts { get; set; } = default!;
 
     [Inject]
     private IAuthorizationService Authorization { get; set; } = default!;
@@ -42,6 +48,7 @@ public partial class Home : ComponentBase
     {
         await LoadModulesAsync();
         await LoadInventoryAsync();
+        await LoadPendingAccountsAsync();
     }
 
     /// <summary>Formats a count, or a dash while the inventory is still loading.</summary>
@@ -117,6 +124,38 @@ public partial class Home : ComponentBase
 
         var result = await Authorization.AuthorizeAsync(user, resource: null, module.Policy);
         return result.Succeeded;
+    }
+
+    /// <summary>
+    /// Counts accounts awaiting activation, for administrators only - a plain
+    /// member never sees who is waiting for validation.
+    /// </summary>
+    private async Task LoadPendingAccountsAsync()
+    {
+        if (AuthenticationState is null)
+        {
+            return;
+        }
+
+        var user = (await AuthenticationState).User;
+        var result = await Authorization.AuthorizeAsync(user, resource: null, AuthorizationPolicyNames.AdministratorOrHigher);
+        _canAdministerAccounts = result.Succeeded;
+
+        if (!_canAdministerAccounts)
+        {
+            return;
+        }
+
+        try
+        {
+            var accounts = await Accounts.GetAccountsAsync();
+            _pendingAccounts = accounts.Count(account => account.IsPending);
+        }
+        catch (DataAccessException)
+        {
+            // Silently ignored: the banner is a convenience, not a critical
+            // feature, and the account screen itself already surfaces errors.
+        }
     }
 
     private async Task LoadInventoryAsync()

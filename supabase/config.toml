@@ -34,6 +34,17 @@ additional_redirect_urls = ["http://localhost:5173/reinitialiser-mot-de-passe"]
 jwt_expiry = 3600
 enable_signup = true
 
+# Écran /inscription (src/MoaMat.Web/Pages/Auth/Register.razor) : la
+# confirmation par e-mail est désactivée par choix produit. Ceci n'affaiblit
+# pas la sécurité : un compte créé reste au rôle « en_attente » (aucune
+# permission, cf. db/roles.sql) tant qu'un admin / super-admin ne l'a pas
+# explicitement activé via l'écran /comptes — seule la vérification de
+# possession de l'adresse e-mail est sautée. À répercuter côté projet hébergé :
+# Dashboard → Authentication → Sign In / Providers → Email → décocher
+# « Confirm email ».
+[auth.email]
+enable_confirmations = false
+
 # Hook « custom access token » : recopie public.utilisateur_role.role dans le
 # claim app_metadata.role du JWT (cf. db/roles.sql). À activer aussi côté
 # Dashboard pour l'environnement hébergé (Authentication → Hooks).

@@ -73,6 +73,44 @@ internal sealed class SupabaseAuthenticationService : IAuthenticationService
     }
 
     /// <inheritdoc />
+    public async Task<OperationResult> SignUpAsync(
+        string email,
+        string password,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrEmpty(password))
+        {
+            return OperationResult.Failure("E-mail ou mot de passe invalide.");
+        }
+
+        try
+        {
+            var session = await _client.Auth.SignUp(email.Trim(), password).ConfigureAwait(false);
+
+            // With e-mail confirmation disabled on the project, GoTrue signs
+            // the caller in as part of SignUp. The screen's contract is that
+            // signing up never grants access by itself (the account still
+            // needs an administrator to activate it), so any such session is
+            // dropped immediately - best effort, the way SignOutAsync already
+            // treats a failing remote sign-out as non-fatal. With
+            // confirmation enabled, SignUp returns no session and this is a
+            // no-op.
+            if (session?.AccessToken is not null)
+            {
+                await SignOutAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            return OperationResult.Success;
+        }
+        catch (GotrueException exception)
+        {
+            return OperationResult.Failure(Translate(exception, nameof(SignUpAsync)));
+        }
+    }
+
+    /// <inheritdoc />
     public async Task SignOutAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -180,6 +218,8 @@ internal sealed class SupabaseAuthenticationService : IAuthenticationService
             FailureHint.Reason.UserBadEmailAddress => "Adresse e-mail invalide.",
             FailureHint.Reason.UserEmailNotConfirmed => "Adresse e-mail non confirmée.",
             FailureHint.Reason.UserMissingInformation => "Mot de passe trop faible (6 caractères minimum).",
+            FailureHint.Reason.UserAlreadyRegistered =>
+                "Un compte existe déjà pour cette adresse. Connectez-vous ou réinitialisez votre mot de passe.",
             FailureHint.Reason.UserTooManyRequests => "Trop de tentatives. Patientez quelques minutes.",
             FailureHint.Reason.Offline
                 or FailureHint.Reason.NetworkError

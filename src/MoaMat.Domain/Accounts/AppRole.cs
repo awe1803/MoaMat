@@ -25,6 +25,16 @@ public sealed record AppRole
     /// <summary>No role at all - an unauthenticated or unknown principal.</summary>
     public static AppRole None { get; } = new(string.Empty, 0);
 
+    /// <summary>
+    /// Default role at sign-up (<c>en_attente</c>). Holds no permission at all:
+    /// the account requests access and stays pending until an administrator (or
+    /// super-administrator) explicitly activates it by assigning a real role.
+    /// Same rank as <see cref="None"/> - it grants nothing - but a distinct
+    /// <see cref="Code"/> so the account screen can tell "pending" apart from
+    /// "unauthenticated".
+    /// </summary>
+    public static AppRole Pending { get; } = new("en_attente", 0);
+
     /// <summary>Read-only access (<c>lecture</c>).</summary>
     public static AppRole Reader { get; } = new("lecture", 1);
 
@@ -66,6 +76,7 @@ public sealed record AppRole
             "admin" => Administrator,
             "gestion" => Manager,
             "lecture" => Reader,
+            "en_attente" => Pending,
             _ => None,
         };
     }

@@ -32,4 +32,12 @@ public sealed record UserAccount(
     /// reserved to a super-administrator (see <c>public.set_compte_actif</c>).
     /// </summary>
     public bool IsBoardMember => Role == AppRole.Reader;
+
+    /// <summary>
+    /// True for an account awaiting activation (<see cref="AppRole.Pending"/>):
+    /// it just signed up and holds no permission until an administrator assigns
+    /// it a real role. Distinct from <see cref="IsDisabled"/> - a pending account
+    /// is not "deactivated", it was simply never activated yet.
+    /// </summary>
+    public bool IsPending => Role == AppRole.Pending;
 }

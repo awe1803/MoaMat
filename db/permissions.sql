@@ -24,6 +24,11 @@
 --
 --  Les policies RLS (db/rls.sql) ne testent JAMAIS le rôle en dur : elles
 --  appellent public.has_permission('<domaine>.<action>').
+--
+--  Le rôle « en_attente » (défaut à l'inscription, db/roles.sql) N'A
+--  INTENTIONNELLEMENT AUCUNE ligne dans public.role_permission ci-dessous :
+--  public.has_permission() renvoie donc faux pour toute permission tant qu'un
+--  admin / super-admin n'a pas explicitement affecté un rôle réel au compte.
 -- =============================================================================
 
 begin;
@@ -125,6 +130,7 @@ insert into public.permission (code, description) values
     ('superadmin.nominate',       'Nommer ou transférer le siège de super-admin'),
     ('compte.read',               'Consulter la liste des comptes utilisateurs'),
     ('compte.disable',            'Activer / désactiver un compte utilisateur'),
+    ('compte.delete',             'Supprimer définitivement un compte utilisateur (départ du club)'),
     ('permission.read',           'Consulter le catalogue des permissions'),
     ('permission.manage',         'Modifier le catalogue des permissions et la matrice'),
     ('audit.read',                'Consulter le journal d''audit'),
@@ -214,7 +220,7 @@ insert into public.role_permission (role, permission_code) values
     ('super-admin', 'achat.read'),       ('super-admin', 'achat.create'),       ('super-admin', 'achat.update'),       ('super-admin', 'achat.delete'),
     ('super-admin', 'devis.read'),       ('super-admin', 'devis.create'),       ('super-admin', 'devis.update'),       ('super-admin', 'devis.delete'),
     ('super-admin', 'role.read'),        ('super-admin', 'role.assign'),        ('super-admin', 'role.assign_admin'),
-    ('super-admin', 'compte.read'),      ('super-admin', 'compte.disable'),
+    ('super-admin', 'compte.read'),      ('super-admin', 'compte.disable'),     ('super-admin', 'compte.delete'),
     ('super-admin', 'superadmin.nominate'),
     ('super-admin', 'permission.read'),  ('super-admin', 'permission.manage'),
     ('super-admin', 'audit.read'),

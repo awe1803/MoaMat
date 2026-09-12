@@ -178,19 +178,33 @@ Variables/Secrets lus par `deploy.yml`, ni les assets publiés. Deux garde-fous 
 
 ### Authentification & rôles
 
-- Connexion / déconnexion et réinitialisation de mot de passe : Supabase Auth
-  (Gotrue), via le port `IAuthenticationService` et son adaptateur
+- Inscription, connexion / déconnexion et réinitialisation de mot de passe :
+  Supabase Auth (Gotrue), via le port `IAuthenticationService` et son
+  adaptateur
   [`SupabaseAuthenticationService`](src/MoaMat.Infrastructure/Supabase/SupabaseAuthenticationService.cs). Pages
-  `/connexion`, `/mot-de-passe-oublie`, `/reinitialiser-mot-de-passe`,
-  `/deconnexion`. Toutes les autres routes exigent une session (`[Authorize]`).
+  `/inscription`, `/connexion`, `/mot-de-passe-oublie`,
+  `/reinitialiser-mot-de-passe`, `/deconnexion`. Toutes les autres routes
+  exigent une session (`[Authorize]`).
+- **Inscription (`/inscription`)** : crée le compte Supabase Auth (confirmation
+  par e-mail désactivée par choix produit — `supabase/config.toml`,
+  `[auth.email] enable_confirmations = false` ; à répercuter côté projet
+  hébergé : Dashboard → Authentication → Providers → Email → décocher
+  « Confirm email ») mais ne connecte jamais l'appelant et n'accorde **aucun**
+  accès applicatif : `SupabaseAuthenticationService.SignUpAsync` déconnecte
+  systématiquement toute session que GoTrue aurait ouverte à l'inscription. Le
+  compte est créé au rôle par défaut `en_attente` (aucune permission — voir
+  `db/roles.sql`) : il reste en attente jusqu'à ce qu'un `admin` /
+  `super-admin` l'active et lui affecte un rôle réel via l'écran `/comptes`.
 - **Session persistée** dans le `localStorage` du navigateur
   (`BrowserSessionPersistence`) : l'utilisateur reste connecté d'un rechargement
   ou d'une réouverture de la PWA à l'autre ; le jeton est rafraîchi
   automatiquement (`AutoRefreshToken`).
-- **Rôle applicatif** (`lecture` < `gestion` < `admin` < `super-admin`).
-  Source de vérité : la table `public.utilisateur_role`, alimentée par le
-  trigger Postgres `on_auth_user_created` au rôle `lecture` à la création du
-  compte (jamais un rôle élevé). Aucune synchronisation applicative côté
+- **Rôle applicatif** (`en_attente` < `lecture` < `gestion` < `admin` <
+  `super-admin`). Source de vérité : la table `public.utilisateur_role`,
+  alimentée par le trigger Postgres `on_auth_user_created` au rôle
+  `en_attente` à la création du compte (aucune permission, jamais un rôle
+  élevé) : un compte reste en attente tant qu'un admin / super-admin ne l'a
+  pas activé et affecté à un rôle. Aucune synchronisation applicative côté
   client. Les policies RLS lisent le rôle dans cette table ; le hook
   `public.custom_access_token_hook` le recopie dans le claim JWT
   `app_metadata.role`, que Blazor lit pour piloter la navigation (politiques
