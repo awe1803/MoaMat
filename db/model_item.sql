@@ -48,6 +48,12 @@
 
 begin;
 
+-- Sur un REJEU, public.v_item dépend déjà de public.v_lieu_contenant et de
+-- public.v_code_club_ambigu (sections 2 et 7 ci-dessous) : la droper d'abord
+-- évite un "cannot drop view ... because other objects depend on it" quand ce
+-- script est relancé après une première exécution. Recréée en section 8.
+drop view if exists public.v_item;
+
 -- -----------------------------------------------------------------------------
 --  1. Catalogue des statuts (référentiel)
 --     Remplace la mosaïque de drapeaux booléens des tables miroir
@@ -67,14 +73,23 @@ create table if not exists public.ref_statut (
 comment on table public.ref_statut is
     'Catalogue des statuts d''un item. est_terminal = retour soumis à « status.terminal.override ».';
 
+-- Machine à états de la fiche ticket « statut / disponibilité / historique ».
+-- Les trois anciens statuts terminaux (déclassé / écarté / rebuté) sont
+-- FUSIONNÉS en un seul statut terminal « retire_du_service » (Q7bis.1) : un
+-- seul enregistrement par objet du berceau au rebut, pas de tables dupliquées.
+-- Perdu et Volé restent des statuts terminaux distincts (assurance, plainte).
+-- Le détail des règles de transition (motif/date obligatoires, pièce jointe
+-- Perte/Vol, irréversibilité, autorité décisionnaire) est en db/item_etat.sql.
 insert into public.ref_statut (code, libelle, est_terminal, ordre) values
-    ('en_service',    'En service',              false, 10),
-    ('a_controler',   'À contrôler',             false, 20),
-    ('a_requalifier', 'À requalifier',           false, 30),
-    ('en_reparation', 'En réparation',           false, 40),
-    ('manquant',      'Manquant / introuvable',  false, 50),
-    ('reforme',      'Réformé / hors service',   true,  90),
-    ('declasse',      'Déclassé',                true,  91)
+    ('en_stock',            'En stock',                 false, 10),
+    ('prete',               'Prêté',                    false, 20),
+    ('en_controle',         'En contrôle',              false, 30),
+    ('en_attente_controle', 'En attente de contrôle',   false, 25),
+    ('en_maintenance',      'En maintenance',           false, 40),
+    ('hors_validite',       'Hors validité',            false, 50),
+    ('retire_du_service',   'Retiré du service',        true,  90),
+    ('perdu',               'Perdu',                     true,  91),
+    ('vole',                'Volé',                      true,  92)
 on conflict (code) do update
     set libelle = excluded.libelle,
         est_terminal = excluded.est_terminal,
@@ -179,8 +194,22 @@ create table if not exists public.item (
     date_acquisition  date,
     prix_eur          numeric(12,2) check (prix_eur is null or prix_eur >= 0),
 
-    statut_code       text not null default 'en_service'
+    statut_code       text not null default 'en_stock'
                       references public.ref_statut (code),
+
+    -- Paramètres d'une transition de statut EN COURS, portés par la même ligne
+    -- que le nouveau statut_code (le client PostgREST les envoie dans le même
+    -- UPDATE). Validés et consignés dans public.item_transition par le trigger
+    -- public.tg_item_valider_transition_statut (db/item_etat.sql), qui les
+    -- remet à NULL une fois la transition actée : ce ne sont pas des champs
+    -- d'état durable, seulement le véhicule du motif/de la date/de la pièce
+    -- jointe/de l'autorité de LA transition demandée.
+    statut_motif           text,
+    statut_date_effet      date,
+    statut_piece_jointe_url text,
+    statut_autorite        text
+                      check (statut_autorite is null
+                             or statut_autorite in ('organisme_controle', 'ca', 'gestionnaire_materiel')),
 
     lieu_contenant_id bigint references public.lieu_contenant (id) on delete set null,
     destination       text,
@@ -429,6 +458,68 @@ create trigger item_code_ambigu
     for each statement execute function public.tg_item_code_ambigu();
 
 -- -----------------------------------------------------------------------------
+--  7bis. Disponibilité CALCULÉE — jamais un champ éditable (cf. ticket
+--        « statut / disponibilité », principe A16 : le statut est calculé,
+--        jamais saisi). Combine échéance réglementaire × statut × prêt en
+--        cours × maintenance en cours. Aucune colonne booléenne de
+--        disponibilité n'existe nulle part dans le modèle : uniquement ces
+--        deux fonctions, appelées par public.v_item (colonne « disponible »).
+--
+--        « Maintenance en cours » / « contrôle en cours » sont déjà des
+--        STATUTS du catalogue (en_maintenance, en_controle,
+--        en_attente_controle) : la disponibilité est donc défensive plutôt que
+--        redondante — elle NE FAIT PAS confiance à statut_code seul et
+--        revérifie aussi l'échéance et le prêt, pour couvrir le cas où les
+--        données dérivent (statut resté « en_stock » alors que l'échéance est
+--        dépassée ou qu'un prêt est encore ouvert). C'est précisément ce que
+--        les constats d'audit A15/A16/A20 (cf. Analyse fonctionnelle) mettent
+--        en évidence sur les données existantes ; voir db/tests/item_etat_tests.sql.
+-- -----------------------------------------------------------------------------
+
+-- Prêt en cours référençant cet item, via le code club (pont vers le miroir
+-- Access public.pret : aucun module « prêt » n'est encore posé sur le modèle
+-- Item — cf. db/MODELE.md §1, le miroir ne change pas). Un item sans
+-- code_club (pièce détachée…) n'a jamais de prêt en cours.
+create or replace function public.item_a_pret_en_cours(p_item public.item)
+returns boolean
+language sql
+stable
+set search_path = ''
+as $$
+    select exists (
+        select 1
+        from public.pret pr
+        where coalesce(pr.est_cloture, false) = false
+          and pr.date_retour_reelle is null
+          and p_item.code_club is not null
+          and btrim(p_item.code_club) <> ''
+          and (
+                (p_item.famille = 'bouteille' and lower(btrim(pr.bouteille_code)) = lower(btrim(p_item.code_club)))
+             or (p_item.famille = 'detendeur' and lower(btrim(pr.detendeur_code)) = lower(btrim(p_item.code_club)))
+             or (p_item.famille = 'gilet'     and lower(btrim(pr.gilet_code))     = lower(btrim(p_item.code_club)))
+          )
+    )
+$$;
+
+comment on function public.item_a_pret_en_cours(public.item) is
+    'Vrai si un prêt (miroir public.pret, ponté par code_club) est ouvert pour cet item. Un des facteurs de public.item_est_disponible().';
+
+create or replace function public.item_est_disponible(p_item public.item)
+returns boolean
+language sql
+stable
+set search_path = ''
+as $$
+    select p_item.actif
+       and p_item.statut_code = 'en_stock'
+       and (p_item.date_echeance is null or p_item.date_echeance >= current_date)
+       and not public.item_a_pret_en_cours(p_item)
+$$;
+
+comment on function public.item_est_disponible(public.item) is
+    'Disponibilité CALCULÉE (jamais saisie) : actif ET statut "en_stock" ET échéance non dépassée ET aucun prêt ouvert. Exposée par public.v_item.disponible.';
+
+-- -----------------------------------------------------------------------------
 --  8. Vue de lecture unifiée : public.v_item
 --     Modèle de LECTURE de l'application (la table item reste la cible
 --     d'ÉCRITURE). Joint le libellé de statut, le chemin de lieu complet et
@@ -454,6 +545,7 @@ create view public.v_item
         i.statut_code,
         st.libelle               as statut_libelle,
         st.est_terminal          as statut_terminal,
+        public.item_est_disponible(i) as disponible,
         i.lieu_contenant_id,
         lc.section               as lieu_section,
         lc.local                 as lieu_local,
@@ -473,7 +565,7 @@ create view public.v_item
     left join public.v_code_club_ambigu ca on ca.id = i.id;
 
 comment on view public.v_item is
-    'Vue de LECTURE de l''inventaire (statut, lieu, ambiguïté résolus). Écriture : table public.item. security_invoker : RLS de item appliquée.';
+    'Vue de LECTURE de l''inventaire (statut, lieu, ambiguïté, disponibilité CALCULÉE résolus). Écriture : table public.item. security_invoker : RLS de item appliquée.';
 
 grant select on public.v_item to authenticated;
 

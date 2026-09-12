@@ -54,6 +54,13 @@ public sealed record InventoryItem
     /// <summary>True when the current status is terminal.</summary>
     public bool IsStatusTerminal { get; init; }
 
+    /// <summary>
+    /// Calculated availability — never an editable field. Combines active
+    /// flag, status, due date and open loans; see <c>public.item_est_disponible()</c>
+    /// (<c>db/model_item.sql</c>).
+    /// </summary>
+    public bool IsAvailable { get; init; }
+
     /// <summary>Container the item is stored in.</summary>
     public long? ContainerId { get; init; }
 

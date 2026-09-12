@@ -35,8 +35,8 @@ public sealed record ItemDraft
     /// <summary>Purchase price in euros.</summary>
     public decimal? PriceEur { get; init; }
 
-    /// <summary>Status code; defaults to the in-service status.</summary>
-    public string StatusCode { get; init; } = "en_service";
+    /// <summary>Status code; defaults to the in-stock status.</summary>
+    public string StatusCode { get; init; } = "en_stock";
 
     /// <summary>Container the item is stored in.</summary>
     public long? ContainerId { get; init; }

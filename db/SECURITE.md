@@ -123,8 +123,16 @@ Les policies RLS n'écrivent **jamais** un rôle en dur : elles appellent
 |--------|-------------|
 | `role.assigned` / `role.changed` / `role.revoked` | trigger sur `public.utilisateur_role` |
 | `compte.disabled` / `compte.enabled` | RPC `public.set_compte_actif()` (écran `/comptes`) |
-| `status.terminal` | triggers sur `bouteille` (déclassement), `detendeur` / `gilet` / `petit_materiel` / `materiel_didactique` (`est_declasse`), `pret` (clôture) |
+| `status.terminal` | triggers sur `bouteille` (déclassement), `detendeur` / `gilet` / `petit_materiel` / `materiel_didactique` (`est_declasse`), `pret` (clôture), et sur `item.statut_code` dès que l'ancien ou le nouveau statut est terminal |
 | `superadmin.nominated` | Edge Function `nominate-super-admin` (via RPC `audit_write`) |
+
+Machine à états de l'item (`db/item_etat.sql`) : en complément de `audit_log`
+ci-dessus, chaque transition de `item.statut_code` est aussi journalisée avec
+son motif, sa date d'effet, son autorité décisionnaire et sa pièce jointe dans
+`public.item_transition` (append-only, même principe qu'`audit_log` : pas de
+policy insert/update/delete, seul le trigger `SECURITY DEFINER`
+`tg_item_valider_transition_statut` y écrit). Détail des règles :
+[`db/MODELE.md`](MODELE.md) §9.
 
 Consultation : écran **`/journal-audit`** de l'application, visible et
 accessible **uniquement** aux rôles `admin` / `super-admin` (permission

@@ -55,6 +55,10 @@ internal sealed class ItemViewRecord : BaseModel
     [Column("statut_terminal")]
     public bool StatutTerminal { get; set; }
 
+    /// <summary>Calculated availability (never an editable field) — see <c>public.item_est_disponible()</c>.</summary>
+    [Column("disponible")]
+    public bool Disponible { get; set; }
+
     [Column("lieu_contenant_id")]
     public long? LieuContenantId { get; set; }
 
