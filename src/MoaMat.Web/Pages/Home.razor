@@ -13,6 +13,17 @@
     <p class="msg-error" role="alert">@_error</p>
 }
 
+@if (_canAdministerAccounts && _pendingAccounts > 0)
+{
+    <div class="alert-banner">
+        <Icon Name="alert" Size="18" />
+        <div class="txt">
+            <b>@_pendingAccounts compte(s)</b> en attente de validation.
+        </div>
+        <a class="alert-action" href="comptes">Voir la liste</a>
+    </div>
+}
+
 @if (_summary.Overdue > 0)
 {
     <div class="alert-banner">

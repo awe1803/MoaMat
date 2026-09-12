@@ -35,7 +35,15 @@
 --    8. Gestion des comptes : un admin ne peut ni désactiver ni révoquer un
 --       compte « CA » (rôle lecture) ni un compte élevé ; l'auto-désactivation
 --       est refusée ; seul un super-admin le peut ; toute désactivation est
---       tracée. Aucune suppression physique de compte n'existe.
+--       tracée.
+--    9. Un nouveau compte est « en_attente » (aucune permission, ne voit que
+--       son propre profil) ; un compte super-admin ne peut être ni supprimé
+--       (ligne de rôle ou compte auth.users), ni rétrogradé s'il est le
+--       dernier, ni désactivé s'il est le dernier actif.
+--   10. Suppression définitive d'un compte (départ du club) : réservée au
+--       super-admin (jamais un admin), auto-suppression refusée, un compte
+--       super-admin ne peut jamais être supprimé, suppression tracée dans
+--       l'audit.
 -- =============================================================================
 
 begin;
@@ -113,14 +121,15 @@ grant execute on all functions in schema moamat_test to authenticated, anon;
 --  Jeu de données de test (créé en tant que « postgres », RLS contournée)
 -- -----------------------------------------------------------------------------
 
--- 6 comptes : le trigger on_auth_user_created insère pour chacun une ligne
--- public.utilisateur_role au rôle « lecture ».
---   a1 : lecture   (cible d'attribution de rôle)
---   a2 : lecture   (« User »)
---   a3 : gestion   (équipe matériel)
---   a4 : admin
---   a5 : super-admin
---   a6 : lecture   (contrôle « rôle par défaut »)
+-- 7 comptes : le trigger on_auth_user_created insère pour chacun une ligne
+-- public.utilisateur_role au rôle « en_attente » (aucune permission).
+--   a1 : lecture      (cible d'attribution de rôle, activé ci-dessous)
+--   a2 : lecture      (« User », activé ci-dessous)
+--   a3 : gestion      (équipe matériel, activé ci-dessous)
+--   a4 : admin        (activé ci-dessous)
+--   a5 : super-admin  (activé ci-dessous)
+--   a6 : lecture      (contrôle « rôle par défaut », activé ci-dessous)
+--   a7 : en_attente   (JAMAIS activé — contrôle du compte en attente)
 do $$
 declare
     v_id uuid;
@@ -132,7 +141,8 @@ begin
         '00000000-0000-0000-0000-0000000000a3'::uuid,
         '00000000-0000-0000-0000-0000000000a4'::uuid,
         '00000000-0000-0000-0000-0000000000a5'::uuid,
-        '00000000-0000-0000-0000-0000000000a6'::uuid
+        '00000000-0000-0000-0000-0000000000a6'::uuid,
+        '00000000-0000-0000-0000-0000000000a7'::uuid
     ]
     loop
         v_i := v_i + 1;
@@ -147,12 +157,13 @@ begin
     end loop;
 end $$;
 
--- 6a. Rôle par défaut à la création : « lecture », jamais « super-admin ».
---     (Contrôle limité aux comptes de test a1..a6 : un super-admin réel a pu
---      être nommé dans le projet, ce qui est sans rapport avec le trigger.)
+-- 6a. Rôle par défaut à la création : « en_attente » (aucune permission),
+--     jamais « super-admin ». (Contrôle limité aux comptes de test a1..a7 : un
+--     super-admin réel a pu être nommé dans le projet, sans rapport avec le
+--     trigger.)
 select moamat_test.expect(
-    'nouveau compte -> role « lecture » par defaut',
-    (select role::text from public.utilisateur_role where user_id = '00000000-0000-0000-0000-0000000000a6') = 'lecture');
+    'nouveau compte -> role « en_attente » par defaut',
+    (select role::text from public.utilisateur_role where user_id = '00000000-0000-0000-0000-0000000000a6') = 'en_attente');
 select moamat_test.expect(
     'le trigger n''attribue jamais « super-admin »',
     (select count(*) from public.utilisateur_role
@@ -163,9 +174,15 @@ select moamat_test.expect(
            '00000000-0000-0000-0000-0000000000a3',
            '00000000-0000-0000-0000-0000000000a4',
            '00000000-0000-0000-0000-0000000000a5',
-           '00000000-0000-0000-0000-0000000000a6']::uuid[])) = 0);
+           '00000000-0000-0000-0000-0000000000a6',
+           '00000000-0000-0000-0000-0000000000a7']::uuid[])) = 0);
 
--- Élévation des rôles de test (en tant que postgres : pas de RLS).
+-- Activation + élévation des rôles de test (en tant que postgres : pas de
+-- RLS) — matérialise l'admin qui active un compte en_attente et lui affecte
+-- un rôle. a7 reste volontairement « en_attente » (compte jamais activé).
+update public.utilisateur_role set role = 'lecture'     where user_id in (
+    '00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-0000000000a2',
+    '00000000-0000-0000-0000-0000000000a6');
 update public.utilisateur_role set role = 'gestion'     where user_id = '00000000-0000-0000-0000-0000000000a3';
 update public.utilisateur_role set role = 'admin'       where user_id = '00000000-0000-0000-0000-0000000000a4';
 update public.utilisateur_role set role = 'super-admin' where user_id = '00000000-0000-0000-0000-0000000000a5';
@@ -444,6 +461,137 @@ select moamat_test.expect('compte — lecture NE VOIT PAS la liste des comptes',
 select moamat_test.expect_raises(
     'compte — lecture NE PEUT PAS (re)activer un compte',
     $q$ select public.set_compte_actif('00000000-0000-0000-0000-0000000000a3', true) $q$);
+
+reset role;
+
+-- =============================================================================
+--  9. Compte « en_attente » (rôle par défaut) et protection du super-admin
+-- =============================================================================
+
+-- 9.1 a7 est resté « en_attente » depuis sa création : aucune permission, ne
+--     voit que son propre profil (rien d'autre).
+select set_config('request.jwt.claims',
+    json_build_object('sub', '00000000-0000-0000-0000-0000000000a7', 'email', 'test-7@moamat.test', 'role', 'authenticated')::text,
+    true);
+set local role authenticated;
+
+select moamat_test.expect('en_attente — role courant = en_attente', public.moamat_current_role() = 'en_attente');
+select moamat_test.expect('en_attente — ne voit que sa propre ligne de role',
+    (select count(*) from public.utilisateur_role) = 1
+    and (select user_id from public.utilisateur_role) = '00000000-0000-0000-0000-0000000000a7');
+select moamat_test.expect('en_attente — 0 bouteille visible',      (select count(*) from public.bouteille)      = 0);
+select moamat_test.expect('en_attente — 0 personne visible',       (select count(*) from public.personne)       = 0);
+select moamat_test.expect('en_attente — 0 audit visible',          (select count(*) from public.audit_log)      = 0);
+select moamat_test.expect('en_attente — 0 compte visible (/comptes)', (select count(*) from public.compte_utilisateur) = 0);
+select moamat_test.expect_write_denied(
+    'en_attente — ne peut pas s''auto-activer',
+    $q$ update public.utilisateur_role set role = 'lecture' where user_id = '00000000-0000-0000-0000-0000000000a7' $q$);
+
+reset role;
+
+-- 9.2 Protection du super-admin : une rétrogradation ne peut jamais laisser
+--     zéro super-admin ACTIF (a5 est, à ce stade, le seul super-admin actif).
+select moamat_test.expect_raises(
+    'super-admin — retrogradation refusee : a5 est le dernier super-admin actif',
+    $q$ update public.utilisateur_role set role = 'admin' where user_id = '00000000-0000-0000-0000-0000000000a5' $q$);
+
+update public.utilisateur_role set role = 'super-admin' where user_id = '00000000-0000-0000-0000-0000000000a3';
+
+select moamat_test.expect_write_ok(
+    'super-admin — retrogradation de a5 autorisee (a3 reste super-admin actif)',
+    $q$ update public.utilisateur_role set role = 'admin' where user_id = '00000000-0000-0000-0000-0000000000a5' $q$);
+
+select moamat_test.expect_raises(
+    'super-admin — retrogradation refusee : a3 est desormais le dernier super-admin actif',
+    $q$ update public.utilisateur_role set role = 'gestion' where user_id = '00000000-0000-0000-0000-0000000000a3' $q$);
+
+-- 9.3 Un compte super-admin ne peut JAMAIS être supprimé — ni sa ligne de rôle,
+--     ni le compte auth.users — quel que soit l'appelant (ici : postgres).
+select moamat_test.expect_raises(
+    'super-admin — suppression de la ligne de role refusee (postgres)',
+    $q$ delete from public.utilisateur_role where user_id = '00000000-0000-0000-0000-0000000000a3' $q$);
+select moamat_test.expect_raises(
+    'super-admin — suppression du compte auth.users refusee (postgres)',
+    $q$ delete from auth.users where id = '00000000-0000-0000-0000-0000000000a3' $q$);
+
+-- 9.4 Désactiver un super-admin ne peut jamais laisser zéro super-admin actif.
+--     a2 est déjà désactivé (section 8.2) : le promouvoir super-admin en fait
+--     un super-admin INACTIF, qui ne compte donc pas comme "autre actif".
+update public.utilisateur_role set role = 'super-admin' where user_id = '00000000-0000-0000-0000-0000000000a2';
+
+select set_config('request.jwt.claims',
+    json_build_object('sub', '00000000-0000-0000-0000-0000000000a2', 'email', 'test-2@moamat.test', 'role', 'authenticated')::text,
+    true);
+set local role authenticated;
+
+select moamat_test.expect_raises(
+    'compte — desactivation refusee : a3 est le dernier super-admin actif',
+    $q$ select public.set_compte_actif('00000000-0000-0000-0000-0000000000a3', false) $q$);
+
+reset role;
+
+-- =============================================================================
+--  10. Suppression définitive d'un compte (départ du club) — public.supprimer_compte
+--      État hérité de la section 9 : a1 = lecture (actif), a2 = super-admin
+--      (banni), a3 = super-admin (actif), a4 = admin (actif), a5 = admin (actif).
+-- =============================================================================
+
+-- 10.1 compte.delete est réservée au super-admin : un admin ne peut pas
+--      supprimer de compte (il ne peut que désactiver).
+select set_config('request.jwt.claims',
+    json_build_object('sub', '00000000-0000-0000-0000-0000000000a4', 'email', 'test-4@moamat.test', 'role', 'authenticated')::text,
+    true);
+set local role authenticated;
+
+select moamat_test.expect_raises(
+    'compte — admin NE PEUT PAS supprimer un compte (compte.delete reservee au super-admin)',
+    $q$ select public.supprimer_compte('00000000-0000-0000-0000-0000000000a1') $q$);
+
+reset role;
+
+-- 10.2 Un super-admin ne peut pas s'auto-supprimer.
+select set_config('request.jwt.claims',
+    json_build_object('sub', '00000000-0000-0000-0000-0000000000a3', 'email', 'test-3@moamat.test', 'role', 'authenticated')::text,
+    true);
+set local role authenticated;
+
+select moamat_test.expect_raises(
+    'compte — super-admin ne peut pas s''auto-supprimer',
+    $q$ select public.supprimer_compte('00000000-0000-0000-0000-0000000000a3') $q$);
+
+-- 10.3 Un compte super-admin ne peut JAMAIS être supprimé, même par un autre
+--      super-admin (a2 est super-admin, quoique banni) — protection au niveau
+--      fonction, doublée par le trigger inconditionnel de db/roles.sql.
+select moamat_test.expect_raises(
+    'compte — super-admin NE PEUT PAS supprimer un autre compte super-admin',
+    $q$ select public.supprimer_compte('00000000-0000-0000-0000-0000000000a2') $q$);
+
+-- 10.4 Un super-admin PEUT supprimer définitivement un compte non élevé
+--      (départ du club). Toujours dans le contexte de a3 (super-admin).
+select public.supprimer_compte('00000000-0000-0000-0000-0000000000a1');
+
+reset role;
+
+select moamat_test.expect(
+    'compte — la suppression definitive retire le compte auth.users',
+    (select count(*) from auth.users where id = '00000000-0000-0000-0000-0000000000a1') = 0);
+select moamat_test.expect(
+    'compte — la suppression definitive retire la ligne de role (cascade)',
+    (select count(*) from public.utilisateur_role where user_id = '00000000-0000-0000-0000-0000000000a1') = 0);
+select moamat_test.expect(
+    'compte — la suppression definitive est tracee (compte.deleted)',
+    (select count(*) from public.audit_log
+     where action = 'compte.deleted' and entity_id = '00000000-0000-0000-0000-0000000000a1') >= 1);
+
+-- 10.5 Un compte déjà supprimé ne peut pas l'être une seconde fois.
+select set_config('request.jwt.claims',
+    json_build_object('sub', '00000000-0000-0000-0000-0000000000a3', 'email', 'test-3@moamat.test', 'role', 'authenticated')::text,
+    true);
+set local role authenticated;
+
+select moamat_test.expect_raises(
+    'compte — suppression d''un compte deja supprime refusee (introuvable)',
+    $q$ select public.supprimer_compte('00000000-0000-0000-0000-0000000000a1') $q$);
 
 reset role;
 
