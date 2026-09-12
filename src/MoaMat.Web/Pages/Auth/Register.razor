@@ -1,0 +1,75 @@
+@page "/inscription"
+@using MoaMat.Web.Pages.Auth.Models
+@layout Layout.AuthLayout
+
+<PageTitle>Créer un compte — MoaMat</PageTitle>
+
+<h1 class="auth-title">Créer un compte</h1>
+
+@if (_isDone)
+{
+    <div class="auth-msg success" role="status">
+        Compte créé pour <b>@_model.Email</b>. Vous pouvez dès à présent vous
+        connecter, mais votre compte reste <strong>en attente</strong> : un
+        administrateur du club doit l'activer et vous affecter un rôle avant que
+        vous puissiez accéder à l'application.
+    </div>
+    <div class="auth-links">
+        <a href="connexion">Se connecter</a>
+    </div>
+}
+else
+{
+    <p class="auth-lead">
+        Demandez un accès à la gestion du matériel Royal Moana. Votre compte
+        restera en attente jusqu'à activation par un administrateur.
+    </p>
+
+    @if (_error is not null)
+    {
+        <div class="auth-msg error" role="alert">@_error</div>
+    }
+
+    <EditForm Model="_model" OnValidSubmit="SubmitAsync">
+        <DataAnnotationsValidator />
+
+        <div class="auth-field">
+            <label for="email">Adresse e-mail</label>
+            <InputText id="email" @bind-Value="_model.Email" type="email" autocomplete="username"
+                       autofocus disabled="@_isBusy" />
+            <ValidationMessage For="() => _model.Email" />
+        </div>
+
+        <div class="auth-field">
+            <label for="password">Mot de passe</label>
+            <InputText id="password" @bind-Value="_model.Password" type="password"
+                       autocomplete="new-password" disabled="@_isBusy" />
+            <ValidationMessage For="() => _model.Password" />
+        </div>
+
+        <div class="auth-field">
+            <label for="confirm">Confirmation</label>
+            <InputText id="confirm" @bind-Value="_model.Confirm" type="password"
+                       autocomplete="new-password" disabled="@_isBusy" />
+            <ValidationMessage For="() => _model.Confirm" />
+        </div>
+
+        <div class="auth-actions">
+            <button type="submit" class="auth-btn" disabled="@_isBusy">
+                @if (_isBusy)
+                {
+                    <span class="auth-spinner" aria-hidden="true"></span>
+                    <span>Création…</span>
+                }
+                else
+                {
+                    <span>Créer le compte</span>
+                }
+            </button>
+        </div>
+    </EditForm>
+
+    <div class="auth-links">
+        <a href="connexion">Déjà un compte ? Se connecter</a>
+    </div>
+}
