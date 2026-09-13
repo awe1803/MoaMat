@@ -52,11 +52,19 @@ jobs:
         env:
           SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+          # Optionnelle : clé PUBLIQUE VAPID des notifications push (vide => fonction masquée).
+          PUSH_VAPID_PUBLIC_KEY: ${{ vars.PUSH_VAPID_PUBLIC_KEY }}
         run: |
           test -n "$SUPABASE_URL"      || { echo "::error::Variable de dépôt SUPABASE_URL absente"; exit 1; }
           test -n "$SUPABASE_ANON_KEY" || { echo "::error::Variable de dépôt SUPABASE_ANON_KEY absente"; exit 1; }
-          jq -n --arg u "$SUPABASE_URL" --arg k "$SUPABASE_ANON_KEY" \
-            '{Supabase:{Url:$u,AnonKey:$k}}' > src/MoaMat.Web/wwwroot/appsettings.json
+          # Une clé publique VAPID fait 87 caractères base64url ; une clé privée
+          # (43) collée ici par erreur serait publiée : on bloque.
+          if [ -n "$PUSH_VAPID_PUBLIC_KEY" ] && [ "${#PUSH_VAPID_PUBLIC_KEY}" -ne 87 ]; then
+            echo "::error::PUSH_VAPID_PUBLIC_KEY n'a pas la forme d'une clé publique VAPID (87 caractères)"; exit 1
+          fi
+          jq -n --arg u "$SUPABASE_URL" --arg k "$SUPABASE_ANON_KEY" --arg p "$PUSH_VAPID_PUBLIC_KEY" \
+            '{Supabase:{Url:$u,AnonKey:$k}} + (if $p == "" then {} else {Push:{VapidPublicKey:$p}} end)' \
+            > src/MoaMat.Web/wwwroot/appsettings.json
           echo "appsettings.json généré (Url=$SUPABASE_URL)."
 
       # Doit se faire AVANT la publication : « dotnet publish » calcule les

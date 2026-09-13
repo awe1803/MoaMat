@@ -3,7 +3,8 @@ namespace MoaMat.Domain.Accounts;
 /// <summary>
 /// Decides what the signed-in administrator is allowed to do on other accounts.
 /// This mirrors the rules enforced by the RLS policies on
-/// <c>public.utilisateur_role</c> and by <c>public.set_compte_actif</c>.
+/// <c>public.utilisateur_role</c>, by <c>public.set_compte_actif</c>, and by
+/// <c>public.supprimer_compte</c>.
 /// </summary>
 /// <remarks>
 /// The rules live here, in one testable place, instead of being spread across
@@ -30,6 +31,14 @@ public sealed class AccountAdministrationPolicy
     public bool CanAdministerAccounts => _actorRole.IsAtLeast(AppRole.Administrator);
 
     private bool IsSuperAdministrator => _actorRole.IsAtLeast(AppRole.SuperAdministrator);
+
+    /// <summary>
+    /// True when the actor may approve a pending account, and therefore may
+    /// subscribe to the "new pending account" push notifications. Mirrors the
+    /// permission <c>role.assign</c> checked by
+    /// <c>public.enregistrer_abonnement_push</c>.
+    /// </summary>
+    public bool CanApprovePendingAccounts => _actorRole.IsAtLeast(AppRole.Administrator);
 
     /// <summary>
     /// True when the actor may change the role of <paramref name="account"/>.
@@ -72,5 +81,22 @@ public sealed class AccountAdministrationPolicy
         return CanAdministerAccounts
             && account.UserId != _actorId
             && (IsSuperAdministrator || (!account.IsElevated && !account.IsBoardMember));
+    }
+
+    /// <summary>
+    /// True when the actor may permanently delete <paramref name="account"/>
+    /// (a member leaving the club). Reserved to a super-administrator - an
+    /// administrator may only deactivate, never delete. Nobody may delete
+    /// their own account, and a super-administrator account can never be
+    /// deleted (it would have to be demoted first).
+    /// </summary>
+    /// <param name="account">Account being administered.</param>
+    public bool CanDeleteAccount(UserAccount account)
+    {
+        ArgumentNullException.ThrowIfNull(account);
+
+        return IsSuperAdministrator
+            && account.UserId != _actorId
+            && account.Role != AppRole.SuperAdministrator;
     }
 }

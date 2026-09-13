@@ -28,11 +28,22 @@ public interface IAccountRepository
     Task<OperationResult> AssignRoleAsync(Guid userId, AppRole role, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Activates or deactivates an account. Accounts are never deleted, only
-    /// deactivated.
+    /// Activates or deactivates an account. This never deletes anything -
+    /// see <see cref="DeleteAccountAsync"/> for permanent deletion.
     /// </summary>
     /// <param name="userId">Target account.</param>
     /// <param name="isActive">True to reactivate, false to deactivate.</param>
     /// <param name="cancellationToken">Cancels the pending request.</param>
     Task<OperationResult> SetActivationAsync(Guid userId, bool isActive, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Permanently deletes an account (a member leaving the club) - the
+    /// account and its role assignment are gone, irreversibly. Reserved to a
+    /// super-administrator; a super-administrator account can never be
+    /// deleted this way (demote it first), and nobody can delete their own
+    /// account through this call.
+    /// </summary>
+    /// <param name="userId">Target account.</param>
+    /// <param name="cancellationToken">Cancels the pending request.</param>
+    Task<OperationResult> DeleteAccountAsync(Guid userId, CancellationToken cancellationToken = default);
 }

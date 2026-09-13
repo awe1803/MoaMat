@@ -1,0 +1,31 @@
+@* Rendered by PendingAccountGate in place of any protected page while the
+   signed-in user has no role: everything but signing out is unreachable. *@
+
+<PageTitle>Compte en attente — MoaMat</PageTitle>
+
+<h1 class="auth-title">Compte en attente de validation</h1>
+<p class="auth-lead">
+    Votre inscription a bien été reçue. Un administrateur du club doit encore
+    activer votre compte et vous affecter un rôle avant que vous puissiez
+    accéder à la gestion du matériel Royal Moana.
+</p>
+
+<div class="auth-msg" role="status">
+    Une fois votre compte activé, déconnectez-vous puis reconnectez-vous pour
+    accéder à l'application. Contactez un administrateur si l'attente vous
+    semble anormalement longue.
+</div>
+
+<div class="auth-actions">
+    <button type="button" class="auth-btn" disabled="@_isSigningOut" @onclick="SignOutAsync">
+        @if (_isSigningOut)
+        {
+            <span class="auth-spinner" aria-hidden="true"></span>
+            <span>Déconnexion…</span>
+        }
+        else
+        {
+            <span>Se déconnecter</span>
+        }
+    </button>
+</div>

@@ -17,6 +17,8 @@ supabase/
       index.ts                    Point d'entrée (Deno.serve)
     nominate-super-admin/         Fonction de référence (voir plus bas)
       index.ts
+    notify-pending-account/       Notification push « nouveau compte en attente »
+      index.ts
 ```
 
 Règles :
@@ -29,7 +31,10 @@ Règles :
 - **aucun secret dans le dépôt** : les clés (`SUPABASE_SERVICE_ROLE_KEY`…) sont
   injectées par la plateforme en production, ou lues depuis `.env.local`
   (git-ignoré) en local ;
-- toute fonction gère le préflight `OPTIONS` (CORS) — cf. `_shared/cors.ts` ;
+- toute fonction appelée par le navigateur gère le préflight `OPTIONS` (CORS)
+  — cf. `_shared/cors.ts`. Exception : `notify-pending-account`, appelée
+  uniquement par la base, est autonome (un seul fichier, collable dans
+  l'éditeur du Dashboard) ;
 - une fonction privilégiée **vérifie elle-même l'appelant** à partir du JWT
   (`Authorization: Bearer …`) avant d'utiliser la clé `service_role`.
 
@@ -101,3 +106,53 @@ jamais attribué par défaut ni codé en dur.
 Amorçage recommandé du **tout premier** super-admin : la requête SQL
 documentée en bas de `db/roles.sql` (exécutée par la personne qui administre
 le projet Supabase). La fonction sert ensuite aux nominations suivantes.
+
+## `notify-pending-account` — notifications push des inscriptions
+
+Envoie une notification Web Push (mobile et desktop) aux comptes **habilités à
+valider une inscription** (permission `role.assign`, soit admin et super-admin)
+dès qu'un compte `en_attente` est créé.
+
+| Aspect | Comportement |
+|--------|--------------|
+| Appelant | la base : trigger `notifier_compte_en_attente` (`db/notifications.sql`) via `pg_net`, **sans JWT** (`verify_jwt = false`) |
+| Auth appelant | en-tête `x-moamat-webhook-secret` = secret `PUSH_WEBHOOK_SECRET` (comparaison à temps constant) |
+| Entrée | `{ "user_id": "<uuid>" }`, relu avec `service_role` ; rien n'est envoyé si le compte n'est plus `en_attente` |
+| Destinataires | RPC `destinataires_push_compte_en_attente()` : abonnements des comptes détenant **encore** `role.assign` et non désactivés |
+| Effet | notification « Nouveau compte en attente » ; un clic ouvre `/comptes?role=en_attente` ; abonnements expirés (404 / 410) supprimés |
+| Sortie | `{ ok, sent, expired, failed }` ou `{ ok, skipped }` |
+
+### Mise en service (une fois par projet)
+
+```bash
+# 1. Clés VAPID (la paire sert à signer les envois)
+npx web-push generate-vapid-keys
+
+# 2. Secrets de la fonction (conserver WEBHOOK_SECRET : il va aussi dans Vault, étape 4)
+WEBHOOK_SECRET="$(openssl rand -hex 32)"; echo "$WEBHOOK_SECRET"
+supabase secrets set \
+  PUSH_WEBHOOK_SECRET="$WEBHOOK_SECRET" \
+  VAPID_PUBLIC_KEY=<publique> \
+  VAPID_PRIVATE_KEY=<privée> \
+  VAPID_SUBJECT=mailto:<adresse de contact>
+
+# 3. Déploiement
+supabase functions deploy notify-pending-account
+```
+
+4. Exécuter `db/notifications.sql`, puis enregistrer dans Vault l'URL de la
+   fonction et **le même** secret que `PUSH_WEBHOOK_SECRET` (requêtes en tête
+   du fichier SQL). Sans ces deux secrets Vault, aucune notification ne part.
+5. Côté client, renseigner la **clé publique** uniquement :
+   Variable de dépôt GitHub `PUSH_VAPID_PUBLIC_KEY` (déploiement) ou
+   `Push:VapidPublicKey` dans `wwwroot/appsettings.json` (local). Vide = bouton
+   masqué.
+6. Chaque admin / super-admin active les notifications **sur chacun de ses
+   appareils** via le bouton « Me notifier des nouvelles inscriptions » de
+   l'écran `/comptes`. Sur iPhone / iPad (iOS 16.4+), l'app doit d'abord être
+   ajoutée à l'écran d'accueil et ouverte depuis l'icône.
+
+La déconnexion retire l'abonnement de l'appareil. Perdre `role.assign` (rôle
+modifié ou supprimé, ou permission retirée du rôle dans la matrice) supprime
+tous les abonnements du compte ; s'il retrouve le droit, il doit réactiver les
+notifications sur chaque appareil.

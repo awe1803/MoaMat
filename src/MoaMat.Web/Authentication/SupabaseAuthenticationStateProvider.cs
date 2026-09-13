@@ -1,8 +1,7 @@
-using System.Globalization;
 using System.Security.Claims;
-using System.Text.Json;
 using Microsoft.AspNetCore.Components.Authorization;
 using MoaMat.Domain.Accounts;
+using MoaMat.Infrastructure.Supabase;
 using Supabase.Gotrue;
 
 namespace MoaMat.Web.Authentication;
@@ -21,7 +20,6 @@ namespace MoaMat.Web.Authentication;
 internal sealed class SupabaseAuthenticationStateProvider : AuthenticationStateProvider, IDisposable
 {
     private const string AuthenticationType = "Supabase";
-    private const string RoleMetadataKey = "role";
 
     private readonly Supabase.Client _client;
 
@@ -36,17 +34,18 @@ internal sealed class SupabaseAuthenticationStateProvider : AuthenticationStateP
 
     /// <inheritdoc />
     public override Task<AuthenticationState> GetAuthenticationStateAsync() =>
-        Task.FromResult(new AuthenticationState(BuildPrincipal(_client.Auth.CurrentUser)));
+        Task.FromResult(new AuthenticationState(BuildPrincipal()));
 
     /// <inheritdoc />
     public void Dispose() => _client.Auth.RemoveStateChangedListener(OnAuthenticationStateChanged);
 
     private void OnAuthenticationStateChanged(object sender, Constants.AuthState state) =>
         NotifyAuthenticationStateChanged(
-            Task.FromResult(new AuthenticationState(BuildPrincipal(_client.Auth.CurrentUser))));
+            Task.FromResult(new AuthenticationState(BuildPrincipal())));
 
-    private static ClaimsPrincipal BuildPrincipal(User? user)
+    private ClaimsPrincipal BuildPrincipal()
     {
+        var user = _client.Auth.CurrentUser;
         if (user?.Id is null)
         {
             return new ClaimsPrincipal(new ClaimsIdentity());
@@ -63,7 +62,9 @@ internal sealed class SupabaseAuthenticationStateProvider : AuthenticationStateP
             claims.Add(new Claim(ClaimTypes.Email, user.Email));
         }
 
-        var role = ReadRole(user);
+        // The role lives in the access token (public.custom_access_token_hook
+        // copies public.utilisateur_role into it), not in the GoTrue user object.
+        var role = SupabaseAccessTokenInspector.ReadRole(_client.Auth.CurrentSession?.AccessToken);
         if (role != AppRole.None)
         {
             claims.Add(new Claim(ClaimTypes.Role, role.Code));
@@ -71,27 +72,5 @@ internal sealed class SupabaseAuthenticationStateProvider : AuthenticationStateP
 
         return new ClaimsPrincipal(
             new ClaimsIdentity(claims, AuthenticationType, ClaimTypes.Name, ClaimTypes.Role));
-    }
-
-    /// <summary>
-    /// Reads <c>app_metadata.role</c>, which the SQL hook
-    /// <c>public.custom_access_token_hook</c> copies from
-    /// <c>public.utilisateur_role</c> - the source of truth the RLS policies use.
-    /// </summary>
-    private static AppRole ReadRole(User user)
-    {
-        if (user.AppMetadata is null || !user.AppMetadata.TryGetValue(RoleMetadataKey, out var value))
-        {
-            return AppRole.None;
-        }
-
-        var code = value switch
-        {
-            string text => text,
-            JsonElement { ValueKind: JsonValueKind.String } element => element.GetString(),
-            _ => null,
-        };
-
-        return AppRole.FromCode(code?.Trim().ToLower(CultureInfo.InvariantCulture));
     }
 }

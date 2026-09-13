@@ -1,0 +1,16 @@
+.push-hint,
+.push-error {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12.5px;
+    line-height: 1.45;
+}
+
+.push-hint {
+    color: var(--ink-3);
+}
+
+.push-error {
+    color: var(--red);
+}

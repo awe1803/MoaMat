@@ -1,4 +1,6 @@
-/* "État" column: the badge and the activation button fit on one line. */
+/* "État" column: the badge and the activation button fit on one line.
+   Applied to an inner wrapper, not the <td>: display:flex on a cell breaks
+   table-cell layout (the cell no longer stretches to the row height). */
 .cell-state {
     display: flex;
     align-items: center;
