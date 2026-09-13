@@ -1,0 +1,12 @@
+@using MoaMat.Web.Pages.Auth
+
+@if (_isBlocked)
+{
+    <LayoutView Layout="@typeof(AuthLayout)">
+        <PendingAccount />
+    </LayoutView>
+}
+else
+{
+    @ChildContent
+}

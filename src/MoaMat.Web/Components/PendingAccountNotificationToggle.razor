@@ -1,0 +1,45 @@
+@switch (_state)
+{
+    case null:
+    case PushNotificationState.NotConfigured:
+        break;
+
+    case PushNotificationState.Unsupported:
+        <span class="push-hint">Notifications push non prises en charge par ce navigateur.</span>
+        break;
+
+    case PushNotificationState.RequiresInstall:
+        <span class="push-hint">
+            Pour être notifié des inscriptions sur iPhone / iPad, ajoutez MoaMat à l'écran d'accueil
+            (Partager → « Sur l'écran d'accueil ») puis ouvrez l'app installée.
+        </span>
+        break;
+
+    case PushNotificationState.Denied:
+        <span class="push-hint">
+            <Icon Name="bell" Size="14" />
+            Notifications bloquées : autorisez-les dans les réglages du navigateur pour ce site.
+        </span>
+        break;
+
+    case PushNotificationState.Enabled:
+        <button type="button" class="btn" @onclick="DisableAsync" disabled="@_isBusy"
+                title="Ne plus recevoir de notification sur cet appareil lors d'une nouvelle inscription">
+            <Icon Name="bell" Size="14" />
+            Notifications activées sur cet appareil
+        </button>
+        break;
+
+    default:
+        <button type="button" class="btn" @onclick="EnableAsync" disabled="@_isBusy"
+                title="Recevoir une notification sur cet appareil lors d'une nouvelle inscription">
+            <Icon Name="bell" Size="14" />
+            Me notifier des nouvelles inscriptions
+        </button>
+        break;
+}
+
+@if (_error is not null)
+{
+    <span class="push-error" role="alert">@_error</span>
+}

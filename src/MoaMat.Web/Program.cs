@@ -6,6 +6,7 @@ using MoaMat.Infrastructure.DependencyInjection;
 using MoaMat.Infrastructure.Supabase;
 using MoaMat.Web;
 using MoaMat.Web.DependencyInjection;
+using MoaMat.Web.Notifications;
 
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
@@ -25,7 +26,15 @@ var supabaseSettings = builder.Configuration
 
 supabaseSettings.Validate();
 
+// Optional: without a VAPID public key the push notification opt-in is hidden.
+var pushSettings = builder.Configuration
+    .GetSection(PushNotificationSettings.SectionName)
+    .Get<PushNotificationSettings>() ?? new PushNotificationSettings();
+
+pushSettings.Validate();
+
 builder.Services.AddSupabaseClient(supabaseSettings);
+builder.Services.AddPushNotifications(pushSettings);
 builder.Services.AddMoaMatInfrastructure();
 builder.Services.AddMoaMatAuthorization();
 

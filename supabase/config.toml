@@ -57,3 +57,10 @@ uri = "pg-functions://postgres/public/custom_access_token_hook"
 # JWT transmis dans l'en-tête Authorization. On garde la vérification de JWT de
 # la plateforme active (défaut).
 verify_jwt = true
+
+[functions.notify-pending-account]
+# Appelée par la base (trigger notifier_compte_en_attente, db/notifications.sql)
+# via pg_net, sans JWT utilisateur : la vérification de JWT de la plateforme
+# est désactivée et la fonction exige le secret partagé PUSH_WEBHOOK_SECRET
+# (en-tête x-moamat-webhook-secret).
+verify_jwt = false

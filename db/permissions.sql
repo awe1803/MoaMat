@@ -250,4 +250,18 @@ comment on function public.has_permission(text) is 'Vrai si le rôle courant (pu
 
 grant execute on function public.has_permission(text) to anon, authenticated;
 
+-- -----------------------------------------------------------------------------
+--  5. Notifications push : la matrice vient d'être rechargée par TRUNCATE (que
+--     les triggers de db/notifications.sql ne voient pas). Si « role.assign » a
+--     été retiré d'un rôle, on supprime les abonnements devenus sans droit.
+--     Sans effet au premier déploiement (db/notifications.sql pas encore passé).
+-- -----------------------------------------------------------------------------
+
+do $$
+begin
+    if to_regprocedure('public.purger_abonnements_push_sans_droit(uuid)') is not null then
+        perform public.purger_abonnements_push_sans_droit(null);
+    end if;
+end $$;
+
 commit;

@@ -17,9 +17,10 @@ Dans l'éditeur SQL Supabase (ou `psql`), **dans cet ordre** :
 | 5 | `db/rls.sql` | policies explicites sur **toutes** les tables ; supprime `moamat_dev_all` |
 | 6 | `db/audit.sql` | table `audit_log` append-only + triggers sur tables sensibles |
 | 7 | `db/comptes.sql` | vue `compte_utilisateur` (liste des comptes) + `set_compte_actif()` (désactivation, réversible) + `supprimer_compte()` (suppression définitive, super-admin uniquement) |
-| 8 | `db/storage.sql` | buckets + policies Storage (réutilise les fonctions de `roles.sql`) |
+| 8 | `db/notifications.sql` | notifications push « nouveau compte en attente » : table `abonnement_push`, RPC d'abonnement réservées à `role.assign`, destinataires, trigger `pg_net` vers l'Edge Function `notify-pending-account` |
+| 9 | `db/storage.sql` | buckets + policies Storage (réutilise les fonctions de `roles.sql`) |
 
-Test : `db/tests/rls_tests.sql` (non destructif, `begin … rollback`).
+Tests : `db/tests/rls_tests.sql` et `db/tests/notifications_tests.sql` (non destructifs, `begin … rollback`).
 
 ## 2. Les 5 rôles
 
@@ -204,6 +205,21 @@ Fonction de référence déployée : **`nominate-super-admin`** — nomme ou
 transfère le siège de super-admin (vacant à l'initialisation, jamais par
 défaut ni codé en dur). Elle vérifie l'appelant via son JWT, puis écrit avec
 la clé `service_role` et journalise dans `audit_log`.
+
+**`notify-pending-account`** — notification push (Web Push) envoyée à la
+création d'un compte `en_attente`. Appelée par la base (trigger
+`notifier_compte_en_attente`, via `pg_net`) avec un secret partagé stocké dans
+Supabase Vault, sans JWT. Destinataires : **uniquement** les comptes dont le
+rôle détient `role.assign` (ceux qui peuvent valider une inscription), et qui
+ne sont pas désactivés. La règle est appliquée à l'abonnement
+(`enregistrer_abonnement_push`), à l'envoi
+(`destinataires_push_compte_en_attente`, réservée à `service_role`) et à la
+perte du droit : rôle modifié ou supprimé, ou `role.assign` retiré du rôle
+dans la matrice => les abonnements du compte sont supprimés
+(`purger_abonnements_push_sans_droit`), et l'appareil est désabonné à la
+prochaine ouverture de `/comptes` ; retrouver le droit ne réactive rien sans
+nouvelle activation. Le trigger ne peut jamais faire échouer
+une inscription.
 
 ## 7. Tests de sécurité
 

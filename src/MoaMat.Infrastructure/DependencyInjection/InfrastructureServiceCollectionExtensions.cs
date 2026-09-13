@@ -4,6 +4,7 @@ using MoaMat.Domain.Audit;
 using MoaMat.Domain.Authentication;
 using MoaMat.Domain.Inventory;
 using MoaMat.Domain.Locations;
+using MoaMat.Domain.Notifications;
 using MoaMat.Infrastructure.Supabase;
 
 namespace MoaMat.Infrastructure.DependencyInjection;
@@ -31,6 +32,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IAuditLogRepository, SupabaseAuditLogRepository>();
         services.AddScoped<IInventoryRepository, SupabaseInventoryRepository>();
         services.AddScoped<ILocationRepository, SupabaseLocationRepository>();
+        services.AddScoped<IPushSubscriptionRepository, SupabasePushSubscriptionRepository>();
 
         return services;
     }

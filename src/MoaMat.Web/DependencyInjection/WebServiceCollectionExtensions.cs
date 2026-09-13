@@ -8,6 +8,7 @@ using MoaMat.Domain.Navigation;
 using MoaMat.Infrastructure.Supabase;
 using MoaMat.Web.Authentication;
 using MoaMat.Web.Navigation;
+using MoaMat.Web.Notifications;
 using Supabase.Gotrue;
 using Supabase.Gotrue.Interfaces;
 
@@ -47,6 +48,26 @@ internal static class WebServiceCollectionExtensions
         services.AddScoped<SupabaseAuthenticationStateProvider>();
         services.AddScoped<AuthenticationStateProvider>(provider =>
             provider.GetRequiredService<SupabaseAuthenticationStateProvider>());
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers the Web Push opt-in. With no VAPID key configured the service
+    /// still resolves, and reports the feature as not configured.
+    /// </summary>
+    /// <param name="services">Container being configured.</param>
+    /// <param name="settings">Validated push settings.</param>
+    /// <returns>The same collection, for chaining.</returns>
+    public static IServiceCollection AddPushNotifications(
+        this IServiceCollection services,
+        PushNotificationSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(settings);
+
+        services.AddSingleton(settings);
+        services.AddScoped<PushNotificationService>();
 
         return services;
     }

@@ -436,6 +436,19 @@ code {
     text-decoration: none;
 }
 
+/* Warning variant: something awaits action but nothing is at risk. */
+.alert-banner.warn {
+    background: var(--amber-bg);
+    border-color: var(--amber-border);
+    color: var(--amber);
+}
+
+.alert-banner.warn .alert-action,
+.alert-banner.warn .alert-action:hover {
+    background: var(--amber);
+    color: var(--amber-bg);
+}
+
 /* ---------------------------------------------------------------------------
    Indicators (KPI)
    ------------------------------------------------------------------------- */

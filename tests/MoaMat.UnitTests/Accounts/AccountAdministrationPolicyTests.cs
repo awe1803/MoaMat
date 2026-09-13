@@ -111,4 +111,20 @@ public sealed class AccountAdministrationPolicyTests
         Assert.True(policy.CanChangeRoleOf(pending));
         Assert.True(policy.CanAssignRole(AppRole.Reader));
     }
+
+    [Theory]
+    [InlineData("admin", true)]
+    [InlineData("super-admin", true)]
+    [InlineData("gestion", false)]
+    [InlineData("lecture", false)]
+    [InlineData("en_attente", false)]
+    [InlineData("", false)]
+    public void Only_the_roles_that_approve_sign_ups_are_offered_the_pending_account_notifications(
+        string roleCode,
+        bool expected)
+    {
+        var policy = new AccountAdministrationPolicy(ActorId, AppRole.FromCode(roleCode));
+
+        Assert.Equal(expected, policy.CanApprovePendingAccounts);
+    }
 }

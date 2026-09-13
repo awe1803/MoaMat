@@ -1,15 +1,17 @@
-﻿<Router AppAssembly="@typeof(App).Assembly" NotFoundPage="typeof(Pages.NotFound)">
+<Router AppAssembly="@typeof(App).Assembly" NotFoundPage="typeof(Pages.NotFound)">
     <Found Context="routeData">
-        <AuthorizeRouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)">
-            <NotAuthorized>
-                <RedirectToLogin />
-            </NotAuthorized>
-            <Authorizing>
-                <LayoutView Layout="@typeof(Layout.AuthLayout)">
-                    <p class="auth-hint">Vérification de la session…</p>
-                </LayoutView>
-            </Authorizing>
-        </AuthorizeRouteView>
+        <PendingAccountGate RouteData="@routeData">
+            <AuthorizeRouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)">
+                <NotAuthorized>
+                    <RedirectToLogin />
+                </NotAuthorized>
+                <Authorizing>
+                    <LayoutView Layout="@typeof(Layout.AuthLayout)">
+                        <p class="auth-hint">Vérification de la session…</p>
+                    </LayoutView>
+                </Authorizing>
+            </AuthorizeRouteView>
+        </PendingAccountGate>
         <FocusOnNavigate RouteData="@routeData" Selector="h1" />
     </Found>
 </Router>

@@ -28,6 +28,10 @@
                 <Icon Name="refresh" Size="14" />
                 Rafraîchir
             </button>
+            @if (_policy.CanApprovePendingAccounts)
+            {
+                <PendingAccountNotificationToggle />
+            }
         </div>
 
         @if (_error is not null)
@@ -35,13 +39,29 @@
             <p class="msg-error" role="alert">@_error</p>
         }
 
+        <div class="chip-row" role="group" aria-label="Rôles">
+            <button type="button" class="chip @(SelectedRole == AppRole.None ? "active" : null)"
+                    @onclick="@(() => FilterBy(AppRole.None))">
+                Tous (@CountFor(AppRole.None))
+            </button>
+            @foreach (var role in FilterRoles)
+            {
+                <button type="button" class="chip @(SelectedRole == role ? "active" : null)"
+                        @onclick="@(() => FilterBy(role))">
+                    @(role == AppRole.Pending ? "en attente" : role.Code) (@CountFor(role))
+                </button>
+            }
+        </div>
+
         @if (_isBusy)
         {
             <p class="msg-muted">Chargement des comptes…</p>
         }
-        else if (_accounts.Count == 0)
+        else if (!VisibleAccounts.Any())
         {
-            <div class="data-list"><p class="data-empty">Aucun compte.</p></div>
+            <div class="data-list">
+                <p class="data-empty">@(_accounts.Count == 0 ? "Aucun compte." : "Aucun compte pour ce rôle.")</p>
+            </div>
         }
         else
         {
@@ -58,7 +78,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach (var account in _accounts)
+                        @foreach (var account in VisibleAccounts)
                         {
                             <tr class="@(account.IsDisabled ? "row-off" : null)">
                                 <td>
@@ -89,20 +109,22 @@
                                         }
                                     </select>
                                 </td>
-                                <td class="cell-state">
-                                    @if (account.IsDisabled)
-                                    {
-                                        <span class="badge off">Désactivé</span>
-                                    }
-                                    else
-                                    {
-                                        <span class="badge on">Actif</span>
-                                    }
-                                    <button type="button" class="btn btn-sm"
-                                            @onclick="() => ToggleActivationAsync(account)"
-                                            disabled="@(_isBusy || !_policy.CanChangeActivationOf(account))">
-                                        @(account.IsDisabled ? "Réactiver" : "Désactiver")
-                                    </button>
+                                <td>
+                                    <div class="cell-state">
+                                        @if (account.IsDisabled)
+                                        {
+                                            <span class="badge off">Désactivé</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge on">Actif</span>
+                                        }
+                                        <button type="button" class="btn btn-sm"
+                                                @onclick="() => ToggleActivationAsync(account)"
+                                                disabled="@(_isBusy || !_policy.CanChangeActivationOf(account))">
+                                            @(account.IsDisabled ? "Réactiver" : "Désactiver")
+                                        </button>
+                                    </div>
                                 </td>
                                 <td class="mono">@Timestamps.Minute(account.LastSignInAt)</td>
                                 <td class="mono">@Timestamps.Day(account.CreatedAt)</td>
@@ -138,7 +160,7 @@
                 </table>
             </div>
             <p class="count-foot">
-                @_accounts.Count compte(s). « CA » = compte au rôle <code>lecture</code> ;
+                @VisibleAccounts.Count() compte(s) affiché(s) sur @_accounts.Count. « CA » = compte au rôle <code>lecture</code> ;
                 sa désactivation est réservée au super-administrateur. Un compte
                 <strong>en attente</strong> vient de s'inscrire et n'a aucun accès :
                 choisir un rôle ci-dessus l'active. La suppression est

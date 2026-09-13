@@ -33,6 +33,14 @@ public sealed class AccountAdministrationPolicy
     private bool IsSuperAdministrator => _actorRole.IsAtLeast(AppRole.SuperAdministrator);
 
     /// <summary>
+    /// True when the actor may approve a pending account, and therefore may
+    /// subscribe to the "new pending account" push notifications. Mirrors the
+    /// permission <c>role.assign</c> checked by
+    /// <c>public.enregistrer_abonnement_push</c>.
+    /// </summary>
+    public bool CanApprovePendingAccounts => _actorRole.IsAtLeast(AppRole.Administrator);
+
+    /// <summary>
     /// True when the actor may change the role of <paramref name="account"/>.
     /// Nobody may change their own role, and only a super-administrator may
     /// touch a privileged account.
