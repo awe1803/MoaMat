@@ -273,6 +273,29 @@ alter table public.item
     add column if not exists statut_piece_jointe_url text,
     add column if not exists statut_autorite public.statut_autorite_t;
 
+-- Rattrapage pour une base déjà provisionnée AVEC statut_autorite dans son
+-- ANCIENNE forme (text + CHECK inline, avant l'introduction du domaine
+-- ci-dessus) : "add column if not exists" ne retype jamais une colonne
+-- existante, il est silencieusement ignoré. Sans ce bloc, une base qui a déjà
+-- joué une version antérieure de ce fichier garderait pour toujours l'ancien
+-- CHECK inline, et les deux listes de valeurs pourraient diverger sans erreur
+-- si le domaine est mis à jour plus tard — exactement ce que le domaine
+-- ci-dessus est censé empêcher.
+do $$
+begin
+    if exists (
+        select 1
+        from information_schema.columns
+        where table_schema = 'public'
+          and table_name = 'item'
+          and column_name = 'statut_autorite'
+          and domain_name is distinct from 'statut_autorite_t'
+    ) then
+        alter table public.item drop constraint if exists item_statut_autorite_check;
+        alter table public.item alter column statut_autorite type public.statut_autorite_t;
+    end if;
+end $$;
+
 comment on table  public.item                  is 'Entité de base commune à toutes les familles de matériel (class-table inheritance). Voir db/MODELE.md.';
 comment on column public.item.id               is 'Vraie clé technique : GENERATED ALWAYS AS IDENTITY. Jamais fournie, jamais réutilisée, non modifiable.';
 comment on column public.item.code_club        is 'Identité « club » affichée, distincte de id. Jamais renumérotée automatiquement (Q1.2).';

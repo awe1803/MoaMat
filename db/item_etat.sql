@@ -68,6 +68,32 @@ create table if not exists public.item_transition (
     cree_le           timestamptz not null default now()
 );
 
+-- Rattrapage pour une base déjà provisionnée AVANT l'introduction du domaine
+-- public.statut_autorite_t (db/model_item.sql) : "create table if not exists"
+-- ci-dessus est un no-op total sur une table déjà présente, donc une base qui
+-- a déjà créé item_transition avec l'ancien "text check(...)" inline garderait
+-- pour toujours cette ancienne contrainte sans jamais adopter le domaine
+-- partagé — même gap que public.item.statut_autorite ci-dessus.
+-- public.v_item_transition (section 1 ci-dessous) dépend de cette colonne :
+-- sur un REJEU, elle existe déjà et bloque l'ALTER COLUMN TYPE ("cannot alter
+-- type of a column used by a view or rule"). On la drope ici ; elle est
+-- recréée inconditionnellement plus bas dans ce même fichier.
+do $$
+begin
+    if exists (
+        select 1
+        from information_schema.columns
+        where table_schema = 'public'
+          and table_name = 'item_transition'
+          and column_name = 'autorite_decision'
+          and domain_name is distinct from 'statut_autorite_t'
+    ) then
+        drop view if exists public.v_item_transition;
+        alter table public.item_transition drop constraint if exists item_transition_autorite_decision_check;
+        alter table public.item_transition alter column autorite_decision type public.statut_autorite_t;
+    end if;
+end $$;
+
 comment on table public.item_transition is
     'Historique append-only des transitions de statut d''un item : motif, date d''effet, autorité décisionnaire, pièce jointe. Alimenté uniquement par public.tg_item_valider_transition_statut.';
 

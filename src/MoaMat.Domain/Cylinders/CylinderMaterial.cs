@@ -6,7 +6,7 @@ namespace MoaMat.Domain.Cylinders;
 /// French to match the schema exactly.
 /// </summary>
 /// <remarks>
-/// Only meaningful for <see cref="CylinderFamily.Diving"/>: steel, aluminium
+/// Only meaningful for <see cref="CylinderUsage.Diving"/>: steel, aluminium
 /// and carbon cylinders each have their own regulatory requalification
 /// periodicity (see <see cref="CylinderReferenceType"/>), unlike the other
 /// cylinder families whose periodicity does not depend on material.

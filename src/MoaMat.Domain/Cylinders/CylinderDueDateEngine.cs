@@ -15,10 +15,12 @@ namespace MoaMat.Domain.Cylinders;
 public static class CylinderDueDateEngine
 {
     /// <summary>Computes the two independent due dates for one cylinder.</summary>
-    /// <param name="family">Usage family of the cylinder.</param>
+    /// <param name="usage">Usage classification of the cylinder.</param>
     /// <param name="material">
-    /// Material of the cylinder; required when <paramref name="family"/> is
-    /// <see cref="CylinderFamily.Diving"/> (see <see cref="CylinderReferenceType.Resolve"/>).
+    /// Material of the cylinder; only meaningful when <paramref name="usage"/> is
+    /// <see cref="CylinderUsage.Diving"/> (see <see cref="CylinderReferenceType.Resolve"/>).
+    /// <c>null</c> there yields <c>null</c> for both due dates rather than an
+    /// error — an incomplete classification, not a fault.
     /// </param>
     /// <param name="lastOpticalControlOn">Date of the last visual inspection, or <c>null</c> if none was ever recorded.</param>
     /// <param name="lastHydraulicControlOn">Date of the last hydraulic requalification, or <c>null</c> if none was ever recorded.</param>
@@ -29,16 +31,16 @@ public static class CylinderDueDateEngine
     /// counter's own last-control date — not at today's date.
     /// </param>
     public static CylinderDueDates ComputeDueDates(
-        CylinderFamily family,
+        CylinderUsage usage,
         CylinderMaterial? material,
         DateOnly? lastOpticalControlOn,
         DateOnly? lastHydraulicControlOn,
         IReadOnlyCollection<CylinderPeriodicityRule> rules)
     {
-        ArgumentNullException.ThrowIfNull(family);
+        ArgumentNullException.ThrowIfNull(usage);
         ArgumentNullException.ThrowIfNull(rules);
 
-        var referenceTypeCode = CylinderReferenceType.Resolve(family, material);
+        var referenceTypeCode = CylinderReferenceType.Resolve(usage, material);
 
         return new CylinderDueDates(
             OpticalDueOn: ComputeDueDate(referenceTypeCode, CylinderControlType.Optical, lastOpticalControlOn, rules),
@@ -46,7 +48,7 @@ public static class CylinderDueDateEngine
     }
 
     private static DateOnly? ComputeDueDate(
-        string referenceTypeCode,
+        string? referenceTypeCode,
         CylinderControlType controlType,
         DateOnly? lastControlOn,
         IReadOnlyCollection<CylinderPeriodicityRule> rules)

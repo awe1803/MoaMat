@@ -301,8 +301,14 @@ indépendante de la matière). `etat_robinetterie` est un champ texte simple —
 `public.bouteille_type_referentiel(famille, matiere)` retombe sur l'un des 6
 codes réglementaires (`plongee_acier`, `plongee_alu`, `plongee_carbone`,
 `deco_o2`, `o2_secourisme`, `bloc_tampon`) ; il est reproduit en C# pur
-(`MoaMat.Domain.Cylinders.CylinderReferenceType`) pour rester testable hors
-base de données.
+(`MoaMat.Domain.Cylinders.CylinderReferenceType`, avec le type d'usage nommé
+`CylinderUsage` — délibérément pas `CylinderFamily`, pour ne pas entrer en
+collision avec l'axe `Inventory.ItemFamily.Cylinder`) pour rester testable
+hors base de données. `famille`/`matiere` manquant(e) (classification pas
+encore faite) donne `NULL`, jamais une erreur ; une valeur renseignée mais
+hors domaine (ex. une matière qui a échappé au `CHECK` par un appel direct)
+lève une exception plutôt que de résoudre silencieusement vers `NULL` —
+même contrat des deux côtés (SQL et C#).
 
 ### 10.2 Référentiels administrables et DATÉS
 
@@ -338,7 +344,10 @@ plus proche des deux, `NULL` seulement si les deux le sont).
 Un trigger `AFTER INSERT/UPDATE` sur `item_bouteille` recopie `echeance_min`
 dans `public.item.date_echeance`, pour que `public.item_est_disponible()`
 (§9.4) et les filtres existants « par échéance » restent corrects sans
-dupliquer le calcul côté client.
+dupliquer le calcul côté client. Un second trigger `AFTER DELETE` remet
+`date_echeance` à `NULL` si la ligne de classification disparaît (ex.
+reclassification hors de la famille bouteille), pour ne jamais laisser une
+échéance obsolète.
 
 ### 10.4 Bascule automatique en « Hors validité » (R2.3)
 

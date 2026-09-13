@@ -30,19 +30,19 @@ public sealed class CylinderDueDateEngineTests
         new(CylinderReferenceType.BufferTankCode, CylinderControlType.Hydraulic, 120, EffectiveFrom),
     ];
 
-    private static CylinderDueDates Compute(CylinderFamily family, CylinderMaterial? material) =>
+    private static CylinderDueDates Compute(CylinderUsage family, CylinderMaterial? material) =>
         CylinderDueDateEngine.ComputeDueDates(family, material, LastControlOn, LastControlOn, Rules);
 
-    public static TheoryData<CylinderFamily, CylinderMaterial?, DateOnly?, DateOnly?> SixProfiles()
+    public static TheoryData<CylinderUsage, CylinderMaterial?, DateOnly?, DateOnly?> SixProfiles()
     {
-        var data = new TheoryData<CylinderFamily, CylinderMaterial?, DateOnly?, DateOnly?>
+        var data = new TheoryData<CylinderUsage, CylinderMaterial?, DateOnly?, DateOnly?>
         {
-            { CylinderFamily.Diving, CylinderMaterial.Steel, LastControlOn.AddMonths(30), LastControlOn.AddMonths(60) },
-            { CylinderFamily.Diving, CylinderMaterial.Aluminium, LastControlOn.AddMonths(30), LastControlOn.AddMonths(60) },
-            { CylinderFamily.Diving, CylinderMaterial.Carbon, null, LastControlOn.AddMonths(36) },
-            { CylinderFamily.DecoOxygen, null, LastControlOn.AddMonths(30), LastControlOn.AddMonths(60) },
-            { CylinderFamily.RescueOxygen, null, LastControlOn.AddMonths(60), null },
-            { CylinderFamily.BufferTank, null, null, LastControlOn.AddMonths(120) },
+            { CylinderUsage.Diving, CylinderMaterial.Steel, LastControlOn.AddMonths(30), LastControlOn.AddMonths(60) },
+            { CylinderUsage.Diving, CylinderMaterial.Aluminium, LastControlOn.AddMonths(30), LastControlOn.AddMonths(60) },
+            { CylinderUsage.Diving, CylinderMaterial.Carbon, null, LastControlOn.AddMonths(36) },
+            { CylinderUsage.DecoOxygen, null, LastControlOn.AddMonths(30), LastControlOn.AddMonths(60) },
+            { CylinderUsage.RescueOxygen, null, LastControlOn.AddMonths(60), null },
+            { CylinderUsage.BufferTank, null, null, LastControlOn.AddMonths(120) },
         };
         return data;
     }
@@ -50,7 +50,7 @@ public sealed class CylinderDueDateEngineTests
     [Theory]
     [MemberData(nameof(SixProfiles))]
     public void Each_of_the_6_profiles_produces_the_expected_due_dates(
-        CylinderFamily family, CylinderMaterial? material, DateOnly? expectedOptical, DateOnly? expectedHydraulic)
+        CylinderUsage family, CylinderMaterial? material, DateOnly? expectedOptical, DateOnly? expectedHydraulic)
     {
         var dueDates = Compute(family, material);
 
@@ -65,7 +65,7 @@ public sealed class CylinderDueDateEngineTests
         // "JAMAIS" in the legacy data) — a recorded control date must still
         // resolve to null, never fall back to some periodicity.
         var dueDates = CylinderDueDateEngine.ComputeDueDates(
-            CylinderFamily.Diving, CylinderMaterial.Carbon, LastControlOn, LastControlOn, Rules);
+            CylinderUsage.Diving, CylinderMaterial.Carbon, LastControlOn, LastControlOn, Rules);
 
         Assert.Null(dueDates.OpticalDueOn);
         Assert.NotNull(dueDates.HydraulicDueOn);
@@ -75,7 +75,7 @@ public sealed class CylinderDueDateEngineTests
     public void The_two_counters_are_independent_when_only_one_control_is_recorded()
     {
         var dueDates = CylinderDueDateEngine.ComputeDueDates(
-            CylinderFamily.Diving, CylinderMaterial.Steel,
+            CylinderUsage.Diving, CylinderMaterial.Steel,
             lastOpticalControlOn: LastControlOn,
             lastHydraulicControlOn: null,
             Rules);
@@ -88,10 +88,10 @@ public sealed class CylinderDueDateEngineTests
     public void Setting_one_counter_never_changes_the_other()
     {
         var before = CylinderDueDateEngine.ComputeDueDates(
-            CylinderFamily.Diving, CylinderMaterial.Steel, LastControlOn, LastControlOn, Rules);
+            CylinderUsage.Diving, CylinderMaterial.Steel, LastControlOn, LastControlOn, Rules);
 
         var afterHydraulicMovedEarlier = CylinderDueDateEngine.ComputeDueDates(
-            CylinderFamily.Diving, CylinderMaterial.Steel,
+            CylinderUsage.Diving, CylinderMaterial.Steel,
             lastOpticalControlOn: LastControlOn,
             lastHydraulicControlOn: LastControlOn.AddYears(-3),
             Rules);
@@ -115,9 +115,9 @@ public sealed class CylinderDueDateEngineTests
         var controlUnderNewRule = new DateOnly(2025, 6, 1);
 
         var oldRuleResult = CylinderDueDateEngine.ComputeDueDates(
-            CylinderFamily.Diving, CylinderMaterial.Steel, null, controlUnderOldRule, rules);
+            CylinderUsage.Diving, CylinderMaterial.Steel, null, controlUnderOldRule, rules);
         var newRuleResult = CylinderDueDateEngine.ComputeDueDates(
-            CylinderFamily.Diving, CylinderMaterial.Steel, null, controlUnderNewRule, rules);
+            CylinderUsage.Diving, CylinderMaterial.Steel, null, controlUnderNewRule, rules);
 
         Assert.Equal(controlUnderOldRule.AddMonths(60), oldRuleResult.HydraulicDueOn);
         Assert.Equal(controlUnderNewRule.AddMonths(48), newRuleResult.HydraulicDueOn);
@@ -137,7 +137,7 @@ public sealed class CylinderDueDateEngineTests
         var rules = new[] { new CylinderPeriodicityRule(CylinderReferenceType.BufferTankCode, CylinderControlType.Hydraulic, 1, new DateOnly(2000, 1, 1)) };
 
         var dueDates = CylinderDueDateEngine.ComputeDueDates(
-            CylinderFamily.BufferTank, material: null,
+            CylinderUsage.BufferTank, material: null,
             lastOpticalControlOn: null,
             lastHydraulicControlOn: new DateOnly(2005, 1, 31),
             rules);
@@ -150,7 +150,7 @@ public sealed class CylinderDueDateEngineTests
     public void EarliestDueOn_ignores_a_counter_that_does_not_apply()
     {
         var dueDates = CylinderDueDateEngine.ComputeDueDates(
-            CylinderFamily.BufferTank, material: null, lastOpticalControlOn: null, lastHydraulicControlOn: LastControlOn, Rules);
+            CylinderUsage.BufferTank, material: null, lastOpticalControlOn: null, lastHydraulicControlOn: LastControlOn, Rules);
 
         Assert.Equal(dueDates.HydraulicDueOn, dueDates.EarliestDueOn);
     }

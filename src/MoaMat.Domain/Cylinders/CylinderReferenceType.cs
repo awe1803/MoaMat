@@ -1,15 +1,20 @@
 namespace MoaMat.Domain.Cylinders;
 
 /// <summary>
-/// Resolves a cylinder's (<see cref="CylinderFamily"/>, <see cref="CylinderMaterial"/>)
+/// Resolves a cylinder's (<see cref="CylinderUsage"/>, <see cref="CylinderMaterial"/>)
 /// pair to the reference type code the periodicity referential is keyed on.
 /// </summary>
 /// <remarks>
 /// Mirrors <c>public.bouteille_type_referentiel(famille, matiere)</c>
 /// (<c>db/item_bouteille.sql</c>) exactly, so the same 6 profiles resolve the
-/// same way in the database and in this pure, testable engine. The 6 codes
-/// match the 6 rows of the legacy <c>public.ref_regle_requalification</c>
-/// mirror: Plongée ACIER/ALU/Carbonne, Deco O², O² Secourisme, Tampons.
+/// same way in the database and in this pure, testable engine — including at
+/// the edges: a missing material for a diving cylinder is an INCOMPLETE
+/// classification (the SQL side propagates NULL for it, never an error, since
+/// <c>item_bouteille.matiere</c> is nullable while awaiting classification),
+/// while an out-of-domain material code is an invalid/unrecognized value and
+/// both sides fail loudly on it. The 6 valid codes match the 6 rows of the
+/// legacy <c>public.ref_regle_requalification</c> mirror: Plongée
+/// ACIER/ALU/Carbonne, Deco O², O² Secourisme, Tampons.
 /// </remarks>
 public static class CylinderReferenceType
 {
@@ -32,29 +37,32 @@ public static class CylinderReferenceType
     public const string BufferTankCode = "bloc_tampon";
 
     /// <summary>
-    /// Resolves the reference type code for a cylinder profile.
+    /// Resolves the reference type code for a cylinder profile, or <c>null</c>
+    /// when the classification is not complete enough to resolve yet.
     /// </summary>
-    /// <param name="family">Usage family of the cylinder.</param>
+    /// <param name="usage">Usage classification of the cylinder.</param>
     /// <param name="material">
-    /// Material of the cylinder. Required — and only meaningful — when
-    /// <paramref name="family"/> is <see cref="CylinderFamily.Diving"/>.
+    /// Material of the cylinder. Only meaningful when <paramref name="usage"/>
+    /// is <see cref="CylinderUsage.Diving"/>; <c>null</c> there means the
+    /// classification is incomplete (e.g. a not-yet-classified legacy item),
+    /// not an error.
     /// </param>
-    /// <exception cref="ArgumentNullException"><paramref name="family"/> is <c>null</c>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="usage"/> is <c>null</c>.</exception>
     /// <exception cref="ArgumentException">
-    /// <paramref name="family"/> is <see cref="CylinderFamily.Diving"/> and <paramref name="material"/> is <c>null</c>:
-    /// the periodicity referential cannot be resolved without a material for that family.
+    /// <paramref name="material"/> is a code outside the known set — a genuine
+    /// data problem, never a legitimately incomplete classification.
     /// </exception>
-    public static string Resolve(CylinderFamily family, CylinderMaterial? material)
+    public static string? Resolve(CylinderUsage usage, CylinderMaterial? material)
     {
-        ArgumentNullException.ThrowIfNull(family);
+        ArgumentNullException.ThrowIfNull(usage);
 
-        if (ReferenceEquals(family, CylinderFamily.Diving))
+        if (ReferenceEquals(usage, CylinderUsage.Diving))
         {
             if (material is null)
             {
-                throw new ArgumentException(
-                    "A diving cylinder requires a material to resolve its periodicity reference type.",
-                    nameof(material));
+                // Incomplete classification, not an error: mirrors
+                // public.bouteille_type_referentiel('plongee', null) -> NULL.
+                return null;
             }
 
             return material.Code switch
@@ -66,6 +74,6 @@ public static class CylinderReferenceType
             };
         }
 
-        return family.Code;
+        return usage.Code;
     }
 }

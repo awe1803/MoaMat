@@ -151,6 +151,29 @@ select moamat_test.expect(
     'resolveur — bloc_tampon => bloc_tampon',
     public.bouteille_type_referentiel('bloc_tampon', null) = 'bloc_tampon');
 
+-- Classification INCOMPLÈTE (famille et/ou matière pas encore renseignée) :
+-- légitime, doit rester NULL, jamais une erreur — public.v_item_bouteille
+-- appelle ce résolveur pour toutes les bouteilles, y compris les non classifiées.
+select moamat_test.expect(
+    'resolveur — famille NULL (pas encore classifiee) => NULL',
+    public.bouteille_type_referentiel(null, null) is null);
+
+select moamat_test.expect(
+    'resolveur — plongee sans matiere (classification incomplete) => NULL',
+    public.bouteille_type_referentiel('plongee', null) is null);
+
+-- Valeur renseignée mais HORS DOMAINE (typo, appel direct contournant le
+-- CHECK de item_bouteille.famille/matiere) : doit échouer bruyamment plutôt
+-- que de résoudre silencieusement vers NULL (indiscernable d'un contrôle qui
+-- ne s'applique légitimement pas à ce profil).
+select moamat_test.expect_raises(
+    'resolveur — matiere hors domaine pour plongee => exception',
+    $q$ select public.bouteille_type_referentiel('plongee', 'titane') $q$);
+
+select moamat_test.expect_raises(
+    'resolveur — famille inconnue => exception',
+    $q$ select public.bouteille_type_referentiel('inconnue', null) $q$);
+
 -- -----------------------------------------------------------------------------
 --  2. Compteurs indépendants + synchronisation de item.date_echeance
 --     (jeu de données créé en tant que "postgres", RLS contournée)
@@ -197,6 +220,19 @@ select moamat_test.expect(
     'sync — item.date_echeance reprend le plus proche des deux (hydraulique ici)',
     (select date_echeance from public.item where id = 999200001)
     = (select echeance_hydraulique from public.v_item_bouteille where item_id = 999200001));
+
+-- Suppression de la ligne de classification (ex. reclassification hors de la
+-- famille bouteille) : item.date_echeance ne doit pas rester bloquée sur la
+-- dernière valeur calculée.
+select moamat_test.expect(
+    'sync — item.date_echeance est bien renseignee avant suppression de item_bouteille',
+    (select date_echeance from public.item where id = 999200001) is not null);
+
+delete from public.item_bouteille where item_id = 999200001;
+
+select moamat_test.expect(
+    'sync — item.date_echeance est remise a NULL quand item_bouteille est supprimee',
+    (select date_echeance from public.item where id = 999200001) is null);
 
 -- -----------------------------------------------------------------------------
 --  3. Bascule automatique en hors_validite dès dépassement d'échéance (R2.3)

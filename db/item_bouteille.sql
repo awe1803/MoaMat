@@ -30,7 +30,8 @@
 --       aucune alternance codée en dur entre optique et hydraulique.
 --    6. public.v_item_bouteille — vue de lecture (échéances calculées).
 --    7. Synchronisation de public.item.date_echeance depuis l'échéance la
---       plus proche des deux compteurs.
+--       plus proche des deux compteurs (et remise à NULL si la ligne de
+--       classification est supprimée).
 --    8. public.item_bouteille_appliquer_hors_validite() — bascule
 --       automatique (R2.3), planifiée via pg_cron si disponible.
 -- =============================================================================
@@ -77,21 +78,52 @@ comment on column public.item_bouteille.date_dernier_controle_hydraulique is
 --     indépendante de la matière.
 -- -----------------------------------------------------------------------------
 
+-- NULL propagé pour une classification INCOMPLÈTE (famille pas encore
+-- renseignée, ou matière pas encore renseignée pour une plongée) : ce sont
+-- des états légitimes (cf. item_bouteille.famille/matiere nullable), jamais
+-- une erreur — public.v_item_bouteille appelle cette fonction pour TOUTES les
+-- bouteilles, y compris celles pas encore classifiées. En revanche, une
+-- valeur non NULL mais hors du domaine attendu (ex. matière 'titane' reçue
+-- par un appel direct qui contourne le CHECK de item_bouteille.matiere) est
+-- un vrai problème de données : on lève une exception plutôt que de résoudre
+-- silencieusement vers NULL, ce qui serait indiscernable d'un contrôle qui ne
+-- s'applique légitimement pas à ce profil.
 create or replace function public.bouteille_type_referentiel(p_famille text, p_matiere text)
 returns text
-language sql
+language plpgsql
 immutable
 set search_path = ''
 as $$
-    select case
-        when p_famille = 'plongee' then 'plongee_' || p_matiere
-        when p_famille in ('deco_o2', 'o2_secourisme', 'bloc_tampon') then p_famille
-        else null
-    end
-$$;
+begin
+    if p_famille is null then
+        return null;
+    end if;
+
+    if p_famille = 'plongee' then
+        if p_matiere is null then
+            return null;
+        elsif p_matiere = 'acier' then
+            return 'plongee_acier';
+        elsif p_matiere = 'alu' then
+            return 'plongee_alu';
+        elsif p_matiere = 'carbone' then
+            return 'plongee_carbone';
+        else
+            raise exception 'bouteille_type_referentiel: matière inconnue ''%'' pour la famille plongee.', p_matiere
+                using errcode = 'invalid_parameter_value';
+        end if;
+    end if;
+
+    if p_famille in ('deco_o2', 'o2_secourisme', 'bloc_tampon') then
+        return p_famille;
+    end if;
+
+    raise exception 'bouteille_type_referentiel: famille inconnue ''%''.', p_famille
+        using errcode = 'invalid_parameter_value';
+end $$;
 
 comment on function public.bouteille_type_referentiel(text, text) is
-    'Résout (famille, matière) -> l''un des 6 codes réglementaires (plongee_acier/plongee_alu/plongee_carbone/deco_o2/o2_secourisme/bloc_tampon). NULL si famille ou matière manquante/inconnue.';
+    'Résout (famille, matière) -> l''un des 6 codes réglementaires (plongee_acier/plongee_alu/plongee_carbone/deco_o2/o2_secourisme/bloc_tampon). NULL si famille ou matière manquante (classification incomplète, légitime) ; lève une exception si famille ou matière est renseignée mais hors domaine (donnée invalide).';
 
 -- -----------------------------------------------------------------------------
 --  3. Référentiel réglementaire — périodicité par (type bouteille × type de
@@ -392,6 +424,34 @@ create trigger item_bouteille_sync_echeance
     after insert or update of famille, matiere, date_dernier_controle_optique, date_dernier_controle_hydraulique
     on public.item_bouteille
     for each row execute function public.tg_item_bouteille_sync_echeance();
+
+-- Si la ligne de classification disparaît (ex. reclassification hors de la
+-- famille bouteille), le trigger ci-dessus ne se déclenche plus : sans ceci,
+-- public.item.date_echeance garderait la dernière valeur calculée, qui
+-- alimenterait ensuite item_est_disponible() et les filtres « par échéance »
+-- avec une date obsolète.
+create or replace function public.tg_item_bouteille_clear_echeance()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+    update public.item
+    set date_echeance = null
+    where id = old.item_id
+      and date_echeance is not null;
+
+    return null;
+end $$;
+
+comment on function public.tg_item_bouteille_clear_echeance() is
+    'Remet public.item.date_echeance à NULL quand sa ligne item_bouteille est supprimée, pour éviter une échéance obsolète (cf. tg_item_bouteille_sync_echeance).';
+
+drop trigger if exists item_bouteille_clear_echeance on public.item_bouteille;
+create trigger item_bouteille_clear_echeance
+    after delete on public.item_bouteille
+    for each row execute function public.tg_item_bouteille_clear_echeance();
 
 -- -----------------------------------------------------------------------------
 --  8. Bascule automatique en « Hors validité » (R2.3) — sans action manuelle.
