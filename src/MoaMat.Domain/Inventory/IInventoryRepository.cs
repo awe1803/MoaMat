@@ -24,6 +24,14 @@ public interface IInventoryRepository
         InventoryFilter filter,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Number of items matching <paramref name="filter"/>, counted by the
+    /// database — the page size of the filter does not bound it.
+    /// </summary>
+    /// <param name="filter">Query criteria.</param>
+    /// <param name="cancellationToken">Cancels the pending request.</param>
+    Task<int> CountItemsAsync(InventoryFilter filter, CancellationToken cancellationToken = default);
+
     /// <summary>One item, or <c>null</c> when it does not exist or is not visible.</summary>
     /// <param name="itemId">Item identifier.</param>
     /// <param name="cancellationToken">Cancels the pending request.</param>

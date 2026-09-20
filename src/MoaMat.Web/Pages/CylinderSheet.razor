@@ -1,0 +1,191 @@
+@page "/bouteilles/{ItemId:long}"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using MoaMat.Domain.Accounts
+@using MoaMat.Domain.Cylinders
+@using MoaMat.Domain.Inventory
+@using MoaMat.Web.Presentation
+
+<PageTitle>@(_item?.ClubCode ?? "Fiche bouteille") — MoaMat</PageTitle>
+
+<AuthorizeView Policy="@AuthorizationPolicyNames.ReaderOrHigher">
+    <NotAuthorized>
+        <div class="page-head"><h1>Fiche bouteille</h1></div>
+        <p class="msg-error" role="alert">Accès réservé aux utilisateurs authentifiés.</p>
+    </NotAuthorized>
+    <Authorized>
+        <a class="back-link" href="inventaire?famille=bouteille">
+            <Icon Name="back" Size="14" />
+            Retour à la liste
+        </a>
+
+        @if (_error is not null)
+        {
+            <p class="msg-error" role="alert">@_error</p>
+        }
+
+        @if (_notice is not null)
+        {
+            <p class="msg-success" role="status">@_notice</p>
+        }
+
+        @if (_isBusy)
+        {
+            <p class="msg-muted">Chargement de la fiche…</p>
+        }
+        else if (_item is null)
+        {
+            <div class="data-list"><p class="data-empty">Bouteille introuvable ou non accessible.</p></div>
+        }
+        else
+        {
+            var dueStatus = _item.DueStatusOn(Today);
+
+            <div class="fiche-head">
+                <div>
+                    <div class="fiche-code">
+                        @(_item.ClubCode ?? $"Bouteille n° {_item.Id}")
+                        @if (_item.HasAmbiguousClubCode)
+                        {
+                            <span class="badge ambigu" title="@_item.DescribeClubCodeAmbiguity()">code ambigu</span>
+                        }
+                    </div>
+                    <div class="fiche-sub">@DescribeSubtitle()</div>
+                </div>
+                <span class="@DueStatusView.BadgeClass(dueStatus)" style="font-size:12px;padding:6px 12px;">
+                    @DueStatusView.Label(dueStatus)
+                </span>
+            </div>
+
+            <div class="char-grid">
+                @foreach (var (label, value) in Characteristics())
+                {
+                    <div class="char-cell"><div class="l">@label</div><div class="v">@value</div></div>
+                }
+            </div>
+
+            <div class="btn-row">
+                <AuthorizeView Policy="@AuthorizationPolicyNames.ManagerOrHigher" Context="manager">
+                    <button type="button" class="btn primary" @onclick="ToggleRequalification" disabled="@_isSaving"
+                            aria-expanded="@_showRequalification">
+                        <Icon Name="plus" Size="14" />
+                        Enregistrer une requalification
+                    </button>
+                </AuthorizeView>
+                <button type="button" class="btn" @onclick="DownloadLifeSheetAsync" disabled="@_isSaving">
+                    <Icon Name="download" Size="14" />
+                    Fiche de vie (PDF)
+                </button>
+                <AuthorizeView Policy="@AuthorizationPolicyNames.ManagerOrHigher" Context="manager">
+                    <button type="button" class="btn" @onclick="ToggleIncident" disabled="@_isSaving"
+                            aria-expanded="@_showIncident">
+                        <Icon Name="alert" Size="14" />
+                        Signaler un incident
+                    </button>
+                </AuthorizeView>
+            </div>
+
+            @if (_showRequalification)
+            {
+                <form class="fiche-panel" @onsubmit="SaveRequalificationAsync">
+                    <h2 class="section-title">Enregistrer une requalification</h2>
+                    <div class="form-grid">
+                        <label class="field">
+                            <span>Contrôle</span>
+                            <select @bind="_reqControl">
+                                <option value="@nameof(CylinderControlType.Optical)">Contrôle optique</option>
+                                <option value="@nameof(CylinderControlType.Hydraulic)">Épreuve hydraulique</option>
+                            </select>
+                        </label>
+                        <label class="field">
+                            <span>Date du contrôle</span>
+                            <input type="date" @bind="_reqDate" max="@Today.ToString("yyyy-MM-dd")" required />
+                        </label>
+                        <label class="field">
+                            <span>Résultat</span>
+                            <select @bind="_reqOutcome" required>
+                                <option value="">— à choisir —</option>
+                                <option value="passed">Conforme</option>
+                                <option value="failed">Échec (bouteille condamnée)</option>
+                            </select>
+                        </label>
+                        <label class="field">
+                            <span>Prestataire</span>
+                            <input type="text" @bind="_reqProvider" placeholder="ex. Apragaz" />
+                        </label>
+                        <label class="field">
+                            <span>Coût (€)</span>
+                            <input type="number" step="0.01" min="0" @bind="_reqCost" />
+                        </label>
+                        <label class="field">
+                            <span>N° de certificat</span>
+                            <input type="text" @bind="_reqCertificate" />
+                        </label>
+                    </div>
+                    <label class="field">
+                        <span>Remarque</span>
+                        <textarea rows="2" @bind="_reqRemark"></textarea>
+                    </label>
+                    <p class="msg-info">
+                        Un contrôle « conforme » renouvelle l'échéance de la bouteille. Un « échec » est
+                        seulement historisé : la bouteille reste où elle est, à déclasser manuellement.
+                    </p>
+                    <div class="btn-row">
+                        <button type="submit" class="btn primary" disabled="@_isSaving">Enregistrer</button>
+                        <button type="button" class="btn" @onclick="ToggleRequalification" disabled="@_isSaving">Annuler</button>
+                    </div>
+                </form>
+            }
+
+            @if (_showIncident)
+            {
+                <form class="fiche-panel" @onsubmit="SaveIncidentAsync">
+                    <h2 class="section-title">Signaler un incident</h2>
+                    <div class="form-grid">
+                        <label class="field">
+                            <span>Date de l'incident</span>
+                            <input type="date" @bind="_incidentDate" max="@Today.ToString("yyyy-MM-dd")" required />
+                        </label>
+                    </div>
+                    <label class="field">
+                        <span>Description</span>
+                        <textarea rows="3" @bind="_incidentDescription" required
+                                  placeholder="Ce qui s'est passé, l'état constaté…"></textarea>
+                    </label>
+                    <p class="msg-info">
+                        Le signalement est daté et journalisé dans la chronologie. Il ne change pas le statut :
+                        la décision de retirer la bouteille du service reste un changement de statut à part.
+                    </p>
+                    <div class="btn-row">
+                        <button type="submit" class="btn primary" disabled="@_isSaving">Signaler</button>
+                        <button type="button" class="btn" @onclick="ToggleIncident" disabled="@_isSaving">Annuler</button>
+                    </div>
+                </form>
+            }
+
+            <div class="section-title" style="margin-top:0;">Chronologie</div>
+            @if (_timeline.Count == 0)
+            {
+                <div class="data-list"><p class="data-empty">Aucun événement enregistré pour cette bouteille.</p></div>
+            }
+            else
+            {
+                <div class="timeline">
+                    @foreach (var entry in _timeline)
+                    {
+                        <div class="tl-item">
+                            <span class="tl-dot @entry.Tone"></span>
+                            <div class="tl-top">
+                                <span class="tl-date">@FormatDate(entry.Date)</span>
+                                <span class="tl-type">@entry.Title</span>
+                            </div>
+                            @if (entry.Detail is not null)
+                            {
+                                <div class="tl-detail">@entry.Detail</div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        }
+    </Authorized>
+</AuthorizeView>

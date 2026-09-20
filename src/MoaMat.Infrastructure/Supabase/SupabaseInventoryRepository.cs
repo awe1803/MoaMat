@@ -5,6 +5,7 @@ using MoaMat.Domain.Inventory;
 using MoaMat.Infrastructure.Supabase.Mapping;
 using MoaMat.Infrastructure.Supabase.Records;
 using Supabase.Postgrest;
+using Supabase.Postgrest.Interfaces;
 
 namespace MoaMat.Infrastructure.Supabase;
 
@@ -35,6 +36,9 @@ internal sealed class SupabaseInventoryRepository : IInventoryRepository
 
     private const string FalseLiteral = "false";
 
+    /// <summary>Characters stripped from free-text search: see <see cref="SanitizeSearchTerm"/>.</summary>
+    private const string SearchReservedCharacters = """,()*%"\&#+""";
+
     private readonly global::Supabase.Client _client;
     private readonly SupabaseCallGuard _guard;
 
@@ -60,52 +64,143 @@ internal sealed class SupabaseInventoryRepository : IInventoryRepository
             ReadFailureMessage,
             async () =>
             {
-                var query = _client.From<ItemViewRecord>()
+                var query = ApplyFilter(_client.From<ItemViewRecord>(), filter)
                     .Order("code_club", Constants.Ordering.Ascending)
                     .Order("id", Constants.Ordering.Ascending)
                     .Limit(filter.MaxResults);
-
-                if (!string.IsNullOrWhiteSpace(filter.FamilyCode))
-                {
-                    query = query.Filter("famille", Constants.Operator.Equals, filter.FamilyCode);
-                }
-
-                if (!string.IsNullOrWhiteSpace(filter.StatusCode))
-                {
-                    query = query.Filter("statut_code", Constants.Operator.Equals, filter.StatusCode);
-                }
-
-                if (filter.ContainerId is { } containerId)
-                {
-                    query = query.Filter("lieu_contenant_id", Constants.Operator.Equals, containerId);
-                }
-
-                if (filter.DueOnOrBefore is { } dueDate)
-                {
-                    query = query.Filter(
-                        "date_echeance",
-                        Constants.Operator.LessThanOrEqual,
-                        dueDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
-                }
-
-                if (filter.Activation is not ActivationScope.All)
-                {
-                    query = query.Filter(
-                        "actif",
-                        Constants.Operator.Is,
-                        filter.Activation is ActivationScope.ActiveOnly ? TrueLiteral : FalseLiteral);
-                }
-
-                if (filter.AmbiguousCodesOnly)
-                {
-                    query = query.Filter("code_club_ambigu", Constants.Operator.Is, TrueLiteral);
-                }
 
                 var response = await query.Get(cancellationToken).ConfigureAwait(false);
                 return (IReadOnlyList<InventoryItem>)[.. response.Models.Select(InventoryItemMapper.ToDomain)];
             },
             cancellationToken);
     }
+
+    /// <inheritdoc />
+    public Task<int> CountItemsAsync(InventoryFilter filter, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+
+        return _guard.ReadAsync(
+            nameof(CountItemsAsync),
+            ReadFailureMessage,
+            () => ApplyFilter(_client.From<ItemViewRecord>(), filter)
+                .Count(Constants.CountType.Exact, cancellationToken),
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Translates every criterion of <paramref name="filter"/> into a PostgREST
+    /// predicate, so the database — not the browser — narrows the list.
+    /// </summary>
+    /// <param name="query">Query on <c>public.v_item</c>.</param>
+    /// <param name="filter">Criteria to apply.</param>
+    private static IPostgrestTable<ItemViewRecord> ApplyFilter(IPostgrestTable<ItemViewRecord> query, InventoryFilter filter)
+    {
+        if (!string.IsNullOrWhiteSpace(filter.FamilyCode))
+        {
+            query = query.Filter("famille", Constants.Operator.Equals, filter.FamilyCode);
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.StatusCode))
+        {
+            query = query.Filter("statut_code", Constants.Operator.Equals, filter.StatusCode);
+        }
+
+        if (filter.ContainerId is { } containerId)
+        {
+            query = query.Filter("lieu_contenant_id", Constants.Operator.Equals, containerId);
+        }
+
+        if (filter.DueOnOrBefore is { } dueDate)
+        {
+            query = query.Filter("date_echeance", Constants.Operator.LessThanOrEqual, ToDateString(dueDate));
+        }
+
+        query = ApplyDueBand(query, filter);
+
+        if (filter.Activation is not ActivationScope.All)
+        {
+            query = query.Filter(
+                "actif",
+                Constants.Operator.Is,
+                filter.Activation is ActivationScope.ActiveOnly ? TrueLiteral : FalseLiteral);
+        }
+
+        if (filter.AmbiguousCodesOnly)
+        {
+            query = query.Filter("code_club_ambigu", Constants.Operator.Is, TrueLiteral);
+        }
+
+        return ApplySearch(query, filter.SearchText);
+    }
+
+    /// <summary>
+    /// Validity band as a window on <c>date_echeance</c>; the boundaries are the
+    /// ones of <see cref="InventoryItem.DueStatusOn"/>, so the list, the badge
+    /// and the chip counters cannot disagree.
+    /// </summary>
+    private static IPostgrestTable<ItemViewRecord> ApplyDueBand(IPostgrestTable<ItemViewRecord> query, InventoryFilter filter)
+    {
+        var today = filter.ReferenceDay;
+        var horizon = ToDateString(today.AddDays(InventoryItem.DueSoonHorizonInDays));
+
+        switch (filter.DueBand)
+        {
+            case DueStatus.Overdue:
+                return query.Filter("date_echeance", Constants.Operator.LessThan, ToDateString(today));
+            case DueStatus.DueSoon:
+                return query
+                    .Filter("date_echeance", Constants.Operator.GreaterThanOrEqual, ToDateString(today))
+                    .Filter("date_echeance", Constants.Operator.LessThanOrEqual, horizon);
+            case DueStatus.Valid:
+                return query.Filter("date_echeance", Constants.Operator.GreaterThan, horizon);
+            default:
+                return query;
+        }
+    }
+
+    /// <summary>Free text as one <c>or</c> group of case-insensitive substring predicates.</summary>
+    private static IPostgrestTable<ItemViewRecord> ApplySearch(IPostgrestTable<ItemViewRecord> query, string? searchText)
+    {
+        var term = SanitizeSearchTerm(searchText);
+        if (term.Length == 0)
+        {
+            return query;
+        }
+
+        var pattern = $"*{term}*";
+
+        return query.Or(
+        [
+            new QueryFilter("code_club", Constants.Operator.ILike, pattern),
+            new QueryFilter("num_serie", Constants.Operator.ILike, pattern),
+            new QueryFilter("marque", Constants.Operator.ILike, pattern),
+            new QueryFilter("modele", Constants.Operator.ILike, pattern),
+            new QueryFilter("lieu_chemin", Constants.Operator.ILike, pattern),
+        ]);
+    }
+
+    /// <summary>
+    /// Removes the characters that carry meaning inside a PostgREST <c>or</c>
+    /// group (separators, grouping, wildcards, quoting, URL escapes): user text
+    /// must never be able to alter the structure of the filter.
+    /// </summary>
+    /// <param name="searchText">Text typed by the user.</param>
+    internal static string SanitizeSearchTerm(string? searchText)
+    {
+        if (string.IsNullOrWhiteSpace(searchText))
+        {
+            return string.Empty;
+        }
+
+        var kept = searchText.Where(character =>
+            !char.IsControl(character) && !SearchReservedCharacters.Contains(character));
+
+        return new string([.. kept]).Trim();
+    }
+
+    private static string ToDateString(DateOnly date) => date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
 
     /// <inheritdoc />
     public Task<InventoryItem?> GetItemAsync(long itemId, CancellationToken cancellationToken = default) =>

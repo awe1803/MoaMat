@@ -139,7 +139,14 @@
                     var status = item.DueStatusOn(Today);
                     <div class="data-row @(item.IsActive ? null : "data-row-off")">
                         <span class="dr-code">
-                            @(item.ClubCode ?? "—")
+                            @if (item.FamilyCode == ItemFamily.Cylinder.Code)
+                            {
+                                <a class="dr-link" href="@Inventory.CylinderHref(item.Id)">@(item.ClubCode ?? "—")</a>
+                            }
+                            else
+                            {
+                                @(item.ClubCode ?? "—")
+                            }
                             @if (item.HasAmbiguousClubCode)
                             {
                                 <span class="badge ambigu" title="@item.DescribeClubCodeAmbiguity()">code ambigu</span>

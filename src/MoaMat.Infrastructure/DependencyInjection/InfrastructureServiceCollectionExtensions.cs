@@ -3,9 +3,11 @@ using MoaMat.Domain.Accounts;
 using MoaMat.Domain.Audit;
 using MoaMat.Domain.Authentication;
 using MoaMat.Domain.Campaigns;
+using MoaMat.Domain.Cylinders;
 using MoaMat.Domain.Inventory;
 using MoaMat.Domain.Locations;
 using MoaMat.Domain.Notifications;
+using MoaMat.Infrastructure.Documents;
 using MoaMat.Infrastructure.Supabase;
 
 namespace MoaMat.Infrastructure.DependencyInjection;
@@ -32,7 +34,9 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IAccountRepository, SupabaseAccountRepository>();
         services.AddScoped<IAuditLogRepository, SupabaseAuditLogRepository>();
         services.AddScoped<ICampaignRepository, SupabaseCampaignRepository>();
+        services.AddScoped<ICylinderRepository, SupabaseCylinderRepository>();
         services.AddScoped<IInventoryRepository, SupabaseInventoryRepository>();
+        services.AddSingleton<ILifeSheetRenderer, PdfLifeSheetRenderer>();
         services.AddScoped<ILocationRepository, SupabaseLocationRepository>();
         services.AddScoped<IPushSubscriptionRepository, SupabasePushSubscriptionRepository>();
 
