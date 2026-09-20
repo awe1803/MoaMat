@@ -50,6 +50,7 @@ Access CSV ─► [schema.sql + initial_load.sql]      staging (miroir, inchang�
 | 10 | **`item_bouteille.sql`** | **moteur métier Bouteilles : référentiels réglementaire/tarifaire datés, échéances à deux compteurs, bascule automatique — voir `MODELE.md` §10** |
 | 11 | `comptes.sql`       | écran /comptes |
 | 12 | `storage.sql`       | buckets Storage |
+| 13 | **`campagne.sql`**  | **campagnes de réépreuve : préparation, bordereau, retour groupé, bouteilles manquantes — voir `MODELE.md` §11** |
 
 ### Transition / repli
 
@@ -379,3 +380,170 @@ d'une fonction, ce qui aurait permis à n'importe quel compte authentifié de
 forcer le statut de n'importe quelle bouteille.
 
 Tests : [`db/tests/item_bouteille_tests.sql`](tests/item_bouteille_tests.sql).
+
+---
+
+## 11. Campagnes de réépreuve ([`db/campagne.sql`](campagne.sql))
+
+Fusion des tickets *entité Campagne*, *écran préparation* et *écran retour* :
+relie le moteur d'échéances (§10.3) et le référentiel tarifaire (§10.2) à un
+cycle d'envoi groupé chez un prestataire externe (ex. Apragaz).
+
+`public.campagne` traverse trois statuts fixes (`preparation` → `envoyee` →
+`retournee`, pas un référentiel administrable comme `ref_statut` : ce sont
+trois étapes figées, pas un catalogue). `public.campagne_ligne` porte une
+bouteille par ligne : `type_prestation` (mêmes 3 valeurs que
+`ref_tarif_apragaz.type_prestation`) reste `NULL` jusqu'à saisie explicite —
+**aucun défaut** entre `hydraulique_huile`/`hydraulique_eau`, décision actée
+avec le gestionnaire produit : le coût des deux méthodes diffère réellement
+(§10.2), le choix ne peut pas être deviné.
+
+Une bouteille ne peut pas être engagée dans deux campagnes actives
+(`preparation`/`envoyee`) simultanément : `tg_campagne_ligne_verifier_unicite_active`
+le vérifie à l'insertion, protégé par `pg_advisory_xact_lock(item_id)` contre
+la course entre deux créations concurrentes pour la même bouteille (ex.
+double clic) — sans ce verrou, les deux insertions pourraient lire « aucun
+conflit » avant qu'aucune n'ait committé. `public.creer_campagne()`
+dédoublonne et **trie** le tableau de bouteilles avant d'itérer : le tri
+donne un ordre global déterministe d'acquisition des verrous avisoires,
+condition nécessaire pour exclure un deadlock entre deux créations dont les
+lots se chevauchent.
+
+Toutes les écritures passent par des fonctions `SECURITY DEFINER`
+(`public.creer_campagne`, `public.definir_prestation_campagne_ligne`,
+`public.envoyer_campagne`, `public.pointer_retour_campagne`), même principe
+que `public.set_compte_actif`/`public.supprimer_compte`
+(`db/comptes.sql`) : `campagne`/`campagne_ligne` n'ont donc **aucune** policy
+insert/update/delete, la cohérence multi-table (transition de statut de la
+bouteille, mise à jour du compteur de contrôle, statut de la campagne) est
+atomique et vérifiée côté base plutôt que recomposée côté client. Les trois
+opérations significatives (création, envoi, retour) sont journalisées via
+`public.audit_write()` (`db/audit.sql`), comme les changements de compte.
+
+Le rôle `lecture` **n'a pas** `campagne.read` (`db/permissions.sql`) : une
+ligne de campagne expose `cout_estime_eur`/`cout_reel_eur`, une dépense
+réellement engagée par le club — plus proche du domaine financier `achat.*`
+(réservé à admin+) qu'un simple référentiel de consultation comme
+`referentiel.read` (qui n'expose qu'un tarif unitaire catalogue, jamais une
+dépense réelle). L'écran `/campagnes` n'a d'ailleurs aucun mode lecture
+seule : `ManagerOrHigher` (gestion+) est son seul point d'entrée, aligné avec
+`campagne.read`/`create`/`update` accordées à gestion/admin/super-admin.
+
+**Suppression** : `public.supprimer_campagne()` (permission `campagne.delete`, accordée au
+**seul super-admin**) supprime une campagne quel que soit son statut, pour le cas où elle
+ne peut pas avoir lieu. Si elle était `envoyee`, ses bouteilles encore `en_controle` sont
+remises `en_stock` ; pour `preparation` et `retournee` aucun statut de bouteille n'est
+touché. Journalisé (`campagne.deleted`). Côté UI : bouton « Supprimer » à confirmation en
+deux clics, visible sous la politique `SuperAdministrator`.
+
+`public.creer_campagne()` valide chaque bouteille sélectionnée — existante,
+de la famille `bouteille` (une ligne `item_bouteille`), active, et dans un
+statut non terminal — et refuse avec un message précis sinon : ce mécanisme
+`SECURITY DEFINER` ne doit jamais pouvoir faire basculer le statut d'un item
+d'une autre famille, ni contourner l'irréversibilité d'un statut terminal, ce
+que laisser l'erreur remonter plus tard depuis
+`tg_item_valider_transition_statut` (au moment de l'envoi) aurait permis en
+pratique mais avec un message confus. `public.envoyer_campagne()` et
+`public.pointer_retour_campagne()` verrouillent la ligne `campagne`
+(`for update`, y compris depuis `definir_prestation_campagne_ligne`) le temps
+de la transaction, pour qu'un double envoi/pointage concurrent ne se
+retrouve jamais à écraser silencieusement le bordereau ou les valeurs déjà
+enregistrées.
+
+Le retour passe en `retournee` dès le **premier** appel de
+`pointer_retour_campagne()`, même partiel : ce statut signifie « au moins une
+session de pointage a eu lieu », pas « tout est revenu » — c'est
+`public.v_campagne_ligne`/les lignes encore sans `date_retour_ligne` qui
+portent le signal de complétude, pas le statut de la campagne. `p_lignes` doit
+être non vide (un tableau vide basculerait la campagne sans qu'aucune
+bouteille ne soit réellement pointée, marquant TOUT le reste manquant d'un
+coup) et chaque date de retour doit être `>= date_envoi` de la campagne — le
+seul contrôle temporel imposé, volontairement minimal pour rester compatible
+avec une saisie a posteriori (aucune contrainte sur une date future).
+`campagne.date_retour` est écrasée à **chaque** appel : elle reflète la
+dernière session de pointage, pas la première — il n'existe pas de table
+d'historique par session ; la date de la toute première session, si besoin,
+se retrouve dans `public.audit_log` (action `campagne.returned`).
+
+La fonction reste appelable pour les bouteilles arrivées en retard ; une
+ligne déjà pointée n'accepte un nouvel appel que si les valeurs resoumises
+sont **identiques** (rejeu idempotent d'un retry réseau), auquel cas c'est un
+**vrai no-op** : ni `campagne_ligne`, ni le compteur de contrôle, ni le statut
+de la bouteille ne sont réécrits — une décision manuelle prise sur cette
+bouteille entretemps (ex. déclassée après un second examen) n'est donc jamais
+silencieusement effacée par un simple retry. Des valeurs différentes sont
+refusées, pour ne jamais faire régresser silencieusement
+`date_dernier_controle_*` (et donc l'échéance recalculée) sur la foi d'une
+correction non voulue. Côté écran, `ReturnCampaign.razor` verrouille les
+lignes déjà pointées (case à cocher et champs désactivés) : une session de
+rattrapage ne resoumet donc jamais une ligne déjà pointée avec la date du
+jour, ce qui aurait sinon échoué contre le garde-fou ci-dessus dès que deux
+sessions n'ont pas lieu le même jour calendaire.
+
+Le no-op est **total**, pas seulement par ligne : un appel qui ne pointe rien
+de neuf (uniquement des rejeux identiques) laisse aussi `campagne.date_retour`/
+`modifie_le` inchangés et n'écrit aucune entrée d'audit `campagne.returned` —
+sauf le tout premier appel, qui acte toujours la transition `envoyee` →
+`retournee`. Sans cette garde globale, un simple retry réseau contenant
+uniquement des lignes déjà pointées aurait quand même avancé silencieusement
+la date de retour affichée et dupliqué l'audit, deux effets de bord qu'un
+« vrai no-op » ne doit jamais avoir.
+
+Une bouteille restée manquante (jamais pointée) ou condamnée (`echec`) reste
+`en_controle` une fois la campagne `retournee`, et le trigger d'unicité ne
+protège que les campagnes `preparation`/`envoyee` — mais
+`public.creer_campagne()` (liste blanche ci-dessous) l'exclut quand même
+d'une **nouvelle** campagne tant qu'elle reste `en_controle` : c'est un choix
+délibéré, pas seulement une conséquence du trigger d'unicité. Ni une
+bouteille manquante ni, surtout, une bouteille **condamnée** ne doivent
+pouvoir glisser dans un nouvel envoi sans que le gestionnaire n'ait d'abord
+tranché son sort (retour à `en_stock` si retrouvée/finalement bonne,
+déclassement terminal si perdue/condamnée) — une bouteille condamnée
+ré-expédiée par inadvertance vers le prestataire serait le pire des deux cas.
+
+`public.creer_campagne()` valide chaque bouteille sélectionnée contre une
+**liste blanche** de statuts éligibles (`en_stock` / `en_attente_controle` /
+`hors_validite` uniquement), pas une simple exclusion des statuts terminaux :
+une bouteille doit être physiquement disponible au club pour être expédiée.
+Exclut donc explicitement `prete` (prêtée à un membre, pas physiquement
+disponible — l'inclure permettrait à un envoi d'écraser silencieusement le
+suivi de prêt), `en_maintenance` (déjà engagée dans un autre workflow
+physique interne) et `en_controle` (résidu, précisément, d'une campagne
+précédente non résolue). `public.envoyer_campagne()` **re-valide la même
+liste blanche** au moment de l'envoi — pas seulement à la création
+(`creer_campagne()` ne protège qu'à l'instant de la sélection ; une bouteille
+peut changer de statut entretemps, pendant que la campagne est encore en
+préparation, via l'écran d'inventaire normal) — puis fait passer chaque
+bouteille en `en_controle` via le trigger existant
+`public.tg_item_valider_transition_statut` (§9.2, motif + historisation, sans
+dupliquer la logique). `public.pointer_retour_campagne()`
+reçoit les seules lignes effectivement reçues (`p_lignes`, JSON) : chacune met
+à jour le compteur de contrôle concerné (`rr` → optique, les deux méthodes
+hydrauliques → hydraulique), ce qui recalcule l'échéance automatiquement via
+les triggers de §10.3, puis rebascule la bouteille en `en_stock`. **Les
+lignes absentes de `p_lignes` restent `en_controle`, sans `date_retour_ligne`
+— c'est exactement la détection des bouteilles manquantes** ; décision actée :
+signalement seul, aucune bascule de statut automatique.
+
+**Résultat de requalification obligatoire** (`campagne_ligne.resultat`,
+`conforme`/`echec`, sans défaut — le gestionnaire doit choisir explicitement,
+comme la prestation à l'envoi). Une bouteille condamnée (`echec`) n'est
+**jamais** rebasculée en `en_stock` ni son compteur de contrôle mis à jour :
+la ligne est enregistrée (coût, certificat, résultat) donc n'apparaît plus
+comme manquante, mais la bouteille reste exactement où elle était
+(`en_controle`) — `CampaignLine.RequiresManualFollowUp` (domaine C#) le
+signale pour un déclassement manuel via l'écran de statut normal (motif +
+autorité décisionnaire, comme toute transition vers un statut terminal ;
+hors du périmètre de cette fonction).
+
+**Messages d'erreur métier** : les refus applicatifs de ce fichier utilisent
+tous `errcode = 'check_violation'` (jamais `foreign_key_violation`/`unique_violation`
+pour une règle métier). `SupabaseFailureTranslator` route ce SQLSTATE vers la
+catégorie *Refused*, donc vers le message spécifique fourni par le
+repository appelant (ex. `SendRefusedMessage`) plutôt que vers le message
+générique « Une erreur inattendue est survenue » — sans ce routage, toute
+règle métier de ce fichier (prestation manquante, coût négatif, date
+antérieure, sélection invalide…) remontait comme une erreur inattendue
+plutôt que comme le refus déterministe qu'elle est réellement.
+
+Tests : [`db/tests/campagne_tests.sql`](tests/campagne_tests.sql).

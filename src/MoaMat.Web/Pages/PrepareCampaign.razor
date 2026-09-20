@@ -1,0 +1,218 @@
+@page "/campagnes/preparer"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using MoaMat.Domain.Accounts
+@using MoaMat.Domain.Campaigns
+@using MoaMat.Domain.Cylinders
+@using MoaMat.Domain.Inventory
+@using MoaMat.Web.Presentation
+
+<PageTitle>Préparer une campagne — MoaMat</PageTitle>
+
+<AuthorizeView Policy="@AuthorizationPolicyNames.ManagerOrHigher">
+    <NotAuthorized>
+        <div class="page-head"><h1>Préparer une campagne</h1></div>
+        <p class="msg-error" role="alert">
+            Cet écran est réservé aux rôles <strong>gestion</strong> et au-dessus.
+        </p>
+    </NotAuthorized>
+    <Authorized>
+        <div class="page-head">
+            <h1>Préparer une campagne</h1>
+            <div class="sub">
+                Regroupe les bouteilles proches de leur échéance (@InventoryItem.DueSoonHorizonInDays jours)
+                pour un envoi groupé chez le prestataire. Le bordereau ne peut être généré
+                que lorsque chaque bouteille a une prestation choisie.
+            </div>
+        </div>
+
+        @if (_error is not null)
+        {
+            <p class="msg-error" role="alert">@_error</p>
+        }
+
+        @if (_isBusy)
+        {
+            <p class="msg-muted">Chargement…</p>
+        }
+        else if (!HasCampaign)
+        {
+            @if (_resumableCampaigns.Count > 0)
+            {
+                <div class="page-head">
+                    <div class="sub">
+                        Campagne(s) en préparation non terminée(s) — le bordereau n'a pas encore
+                        été généré pour ces bouteilles, déjà engagées et indisponibles pour une
+                        nouvelle sélection tant qu'elles ne sont pas reprises ici.
+                    </div>
+                </div>
+                <div class="table-scroll">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Campagne</th>
+                                <th>Prestataire</th>
+                                <th>Bouteilles</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var campaign in _resumableCampaigns)
+                            {
+                                <tr>
+                                    <td>#@campaign.Id</td>
+                                    <td>@campaign.Provider</td>
+                                    <td>@campaign.Lines.Count</td>
+                                    <td>
+                                        <a class="btn btn-sm" href="@RouteFor(campaign.Id)">Reprendre</a>
+                                        <AuthorizeView Policy="@AuthorizationPolicyNames.SuperAdministrator" Context="superAdmin">
+                                            @if (_pendingDeleteId == campaign.Id)
+                                            {
+                                                <span class="msg-muted">Suppression définitive, irréversible.</span>
+                                                <button type="button" class="btn btn-sm danger"
+                                                        @onclick="() => DeleteCampaignAsync(campaign)" disabled="@_isSubmitting">
+                                                    Confirmer
+                                                </button>
+                                                <button type="button" class="btn btn-sm" @onclick="CancelDelete" disabled="@_isSubmitting">
+                                                    Annuler
+                                                </button>
+                                            }
+                                            else
+                                            {
+                                                <button type="button" class="btn btn-sm danger"
+                                                        @onclick="() => RequestDelete(campaign)" disabled="@_isSubmitting">
+                                                    Supprimer
+                                                </button>
+                                            }
+                                        </AuthorizeView>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+
+            <div class="toolbar">
+                <label>
+                    Prestataire
+                    <input type="text" @bind="_provider" />
+                </label>
+                <button type="button" class="btn" @onclick="CreateCampaignAsync"
+                        disabled="@(_selectedItemIds.Count == 0 || _isSubmitting)">
+                    Créer la campagne (@_selectedItemIds.Count sélectionnée(s))
+                </button>
+            </div>
+
+            @if (_dueSoonItems.Count == 0)
+            {
+                <div class="data-list"><p class="data-empty">Aucune bouteille proche de son échéance.</p></div>
+            }
+            else
+            {
+                <div class="table-scroll">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th></th>
+                                <th>Code club</th>
+                                <th>Échéance</th>
+                                <th>Statut</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in _dueSoonItems)
+                            {
+                                var status = item.DueStatusOn(DateOnly.FromDateTime(DateTime.Today));
+                                <tr>
+                                    <td>
+                                        <input type="checkbox"
+                                               checked="@_selectedItemIds.Contains(item.Id)"
+                                               @onchange="e => ToggleSelection(item.Id, (bool)(e.Value ?? false))" />
+                                    </td>
+                                    <td>@(item.ClubCode ?? "—")</td>
+                                    <td class="mono">@(item.DueOn?.ToString("dd/MM/yyyy") ?? "—")</td>
+                                    <td><span class="@DueStatusView.BadgeClass(status)">@DueStatusView.Label(status)</span></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        }
+        else
+        {
+            <div class="page-head">
+                <div class="sub">
+                    Campagne #@_campaign!.Id — @_campaign.Provider — @_campaign.Lines.Count bouteille(s)
+                    @if (EstimatedTotal is { } total)
+                    {
+                        <text> — estimation @total.ToString("0.00") €</text>
+                    }
+                </div>
+            </div>
+
+            <div class="table-scroll">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Code club</th>
+                            <th>Prestation</th>
+                            <th>Coût estimé</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var line in _campaign.Lines)
+                        {
+                            <tr>
+                                <td>@(line.ItemClubCode ?? "—")</td>
+                                <td>
+                                    <select value="@(line.ServiceType?.Code ?? string.Empty)"
+                                            @onchange="e => SetLineServiceTypeAsync(line, e.Value as string)"
+                                            disabled="@_isSubmitting"
+                                            aria-label="@($"Prestation pour {line.ItemClubCode}")">
+                                        <option value="" disabled>— à choisir —</option>
+                                        @foreach (var service in CylinderServiceType.All)
+                                        {
+                                            <option value="@service.Code">
+                                                @service.DisplayName
+                                                @if (PriceFor(service) is { } price)
+                                                {
+                                                    <text> (@price.ToString("0.00") €)</text>
+                                                }
+                                            </option>
+                                        }
+                                    </select>
+                                </td>
+                                <td class="mono">@(line.EstimatedCostEur?.ToString("0.00") + " €" ?? "—")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            @if (LinesMissingService.Any())
+            {
+                <p class="msg-muted">
+                    @LinesMissingService.Count() ligne(s) sans prestation choisie : l'envoi est bloqué tant qu'elles ne sont pas renseignées.
+                </p>
+            }
+            else
+            {
+                <div class="toolbar">
+                    <label>
+                        N° de bon
+                        <input type="text" @bind="_bordereauNumber" />
+                    </label>
+                    <label>
+                        Date d'envoi
+                        <input type="date" @bind="_sentOn" />
+                    </label>
+                    <button type="button" class="btn" @onclick="SendCampaignAsync"
+                            disabled="@(string.IsNullOrWhiteSpace(_bordereauNumber) || _isSubmitting)">
+                        Générer le bordereau et envoyer
+                    </button>
+                </div>
+            }
+        }
+    </Authorized>
+</AuthorizeView>

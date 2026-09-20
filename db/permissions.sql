@@ -113,6 +113,11 @@ insert into public.permission (code, description) values
     ('referentiel.create',        'Créer une entrée de référentiel'),
     ('referentiel.update',        'Modifier une entrée de référentiel'),
     ('referentiel.delete',        'Supprimer une entrée de référentiel'),
+    -- Campagnes de réépreuve de bouteilles (db/campagne.sql)
+    ('campagne.read',             'Consulter les campagnes de réépreuve'),
+    ('campagne.create',           'Créer une campagne de réépreuve'),
+    ('campagne.update',           'Préparer, envoyer et pointer le retour d''une campagne'),
+    ('campagne.delete',           'Supprimer une campagne de réépreuve (super-admin uniquement)'),
     -- Achats / factures / réceptions (données financières)
     ('achat.read',                'Consulter les achats et factures'),
     ('achat.create',              'Créer un achat / une facture'),
@@ -161,6 +166,13 @@ insert into public.role_permission (role, permission_code) values
     ('lecture', 'item.read'),
     ('lecture', 'fournisseur.read'),
     ('lecture', 'referentiel.read');
+    -- PAS 'campagne.read' : une campagne porte des coûts réels engagés
+    -- (cout_estime_eur / cout_reel_eur, lisibles via public.v_campagne_ligne),
+    -- plus proche des données financières réservées à achat.* (admin+) que
+    -- d'un référentiel de consultation — contrairement à referentiel.read,
+    -- qui n'expose qu'un TARIF unitaire catalogue, jamais une dépense réelle
+    -- du club. L'écran /campagnes lui-même n'a d'ailleurs aucun mode lecture
+    -- seule : ManagerOrHigher (gestion+) est le seul point d'entrée UI.
 
 -- 3.2 gestion — équipe matériel. Écriture sur les items, pas sur les
 --     référentiels ni les données financières.
@@ -176,7 +188,8 @@ insert into public.role_permission (role, permission_code) values
     ('gestion', 'item.read'),        ('gestion', 'item.create'),        ('gestion', 'item.update'),        ('gestion', 'item.delete'),
     ('gestion', 'personne.read'),    ('gestion', 'personne.create'),    ('gestion', 'personne.update'),
     ('gestion', 'fournisseur.read'), ('gestion', 'fournisseur.create'), ('gestion', 'fournisseur.update'),
-    ('gestion', 'referentiel.read');
+    ('gestion', 'referentiel.read'),
+    ('gestion', 'campagne.read'), ('gestion', 'campagne.create'), ('gestion', 'campagne.update');
 
 -- 3.3 admin — administration. Référentiels, finances, audit, attribution des
 --     rôles lecture / gestion.
@@ -193,6 +206,7 @@ insert into public.role_permission (role, permission_code) values
     ('admin', 'personne.read'),    ('admin', 'personne.create'),    ('admin', 'personne.update'),    ('admin', 'personne.delete'),
     ('admin', 'fournisseur.read'), ('admin', 'fournisseur.create'), ('admin', 'fournisseur.update'), ('admin', 'fournisseur.delete'),
     ('admin', 'referentiel.read'), ('admin', 'referentiel.create'), ('admin', 'referentiel.update'), ('admin', 'referentiel.delete'),
+    ('admin', 'campagne.read'),    ('admin', 'campagne.create'),    ('admin', 'campagne.update'),
     ('admin', 'achat.read'),       ('admin', 'achat.create'),       ('admin', 'achat.update'),       ('admin', 'achat.delete'),
     ('admin', 'devis.read'),       ('admin', 'devis.create'),       ('admin', 'devis.update'),       ('admin', 'devis.delete'),
     ('admin', 'role.read'),        ('admin', 'role.assign'),
@@ -217,6 +231,7 @@ insert into public.role_permission (role, permission_code) values
     ('super-admin', 'personne.read'),    ('super-admin', 'personne.create'),    ('super-admin', 'personne.update'),    ('super-admin', 'personne.delete'),
     ('super-admin', 'fournisseur.read'), ('super-admin', 'fournisseur.create'), ('super-admin', 'fournisseur.update'), ('super-admin', 'fournisseur.delete'),
     ('super-admin', 'referentiel.read'), ('super-admin', 'referentiel.create'), ('super-admin', 'referentiel.update'), ('super-admin', 'referentiel.delete'),
+    ('super-admin', 'campagne.read'),    ('super-admin', 'campagne.create'),    ('super-admin', 'campagne.update'),  ('super-admin', 'campagne.delete'),
     ('super-admin', 'achat.read'),       ('super-admin', 'achat.create'),       ('super-admin', 'achat.update'),       ('super-admin', 'achat.delete'),
     ('super-admin', 'devis.read'),       ('super-admin', 'devis.create'),       ('super-admin', 'devis.update'),       ('super-admin', 'devis.delete'),
     ('super-admin', 'role.read'),        ('super-admin', 'role.assign'),        ('super-admin', 'role.assign_admin'),

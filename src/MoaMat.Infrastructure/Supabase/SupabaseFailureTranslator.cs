@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Supabase.Postgrest.Exceptions;
 
@@ -23,6 +24,20 @@ internal static class SupabaseFailureTranslator
     /// <summary>PostgreSQL error code for a row-level security refusal.</summary>
     private const string InsufficientPrivilegeCode = "42501";
 
+    /// <summary>
+    /// PostgreSQL error code for a CHECK constraint or an explicit
+    /// <c>RAISE ... USING ERRCODE = 'check_violation'</c> — the SQLSTATE this
+    /// codebase's own business-rule refusals deliberately raise (missing
+    /// service type, a date out of order, a negative cost, an ineligible
+    /// bottle selection, ...). Categorized as <see cref="SupabaseFailureCategory.Refused"/>,
+    /// same as a permission refusal: a deterministic "this call is invalid"
+    /// outcome the caller's own <c>refusedMessage</c> already explains, never
+    /// worth surfacing as "Une erreur inattendue est survenue" — that wording
+    /// suggests a transient failure worth retrying, which a business-rule
+    /// refusal never is.
+    /// </summary>
+    private const string CheckViolationCode = "23514";
+
     /// <summary>PostgreSQL error code for a unique constraint violation.</summary>
     private const string UniqueViolationCode = "23505";
 
@@ -42,7 +57,7 @@ internal static class SupabaseFailureTranslator
         string operationName,
         ILogger logger)
     {
-        var category = Categorize(exception);
+        var category = Categorize(exception.StatusCode, exception.Content);
 
         logger.LogWarning(
             exception,
@@ -70,30 +85,77 @@ internal static class SupabaseFailureTranslator
         return NetworkMessage;
     }
 
-    private static SupabaseFailureCategory Categorize(PostgrestException exception)
+    /// <summary>
+    /// Pure categorization logic, taking plain values rather than a
+    /// <see cref="PostgrestException"/> so it can be unit tested without one
+    /// — the exception type's <c>Content</c>/<c>StatusCode</c> setters are
+    /// internal to the Supabase package, unconstructible from outside it.
+    /// </summary>
+    /// <param name="statusCode">HTTP status code PostgREST responded with.</param>
+    /// <param name="content">Raw PostgREST response body, or <c>null</c>.</param>
+    internal static SupabaseFailureCategory Categorize(int statusCode, string? content)
     {
-        var status = (HttpStatusCode)exception.StatusCode;
-        var content = exception.Content ?? string.Empty;
+        var status = (HttpStatusCode)statusCode;
+        var sqlState = ExtractSqlState(content);
 
         if (status is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden
-            || content.Contains(InsufficientPrivilegeCode, StringComparison.Ordinal))
+            || sqlState is InsufficientPrivilegeCode or CheckViolationCode)
         {
             return SupabaseFailureCategory.Refused;
         }
 
         if (status == HttpStatusCode.Conflict
-            || content.Contains(UniqueViolationCode, StringComparison.Ordinal)
-            || content.Contains(ForeignKeyViolationCode, StringComparison.Ordinal))
+            || sqlState is UniqueViolationCode or ForeignKeyViolationCode)
         {
             return SupabaseFailureCategory.Conflict;
         }
 
         // Status 0 means the request never produced an HTTP response.
-        if (exception.StatusCode is 0 or >= 500)
+        if (statusCode is 0 or >= 500)
         {
             return SupabaseFailureCategory.Unreachable;
         }
 
         return SupabaseFailureCategory.Unexpected;
+    }
+
+    /// <summary>
+    /// Reads the <c>code</c> field of a PostgREST error body — <c>{"code":
+    /// "23514", "message": "...", ...}</c> — as an exact value, never a
+    /// substring match on the raw body.
+    /// </summary>
+    /// <remarks>
+    /// A substring search (the previous implementation) is unsafe here: this
+    /// codebase's own <c>RAISE EXCEPTION</c> messages routinely embed a
+    /// numeric id in the <c>message</c> field (e.g. "La bouteille 123514 est
+    /// déjà engagée…", <c>db/campagne.sql</c>), and that id can itself
+    /// contain one of the SQLSTATE digit strings being searched for —
+    /// misclassifying an unrelated error (or worse, silently flipping a
+    /// <see cref="SupabaseFailureCategory.Conflict"/> into
+    /// <see cref="SupabaseFailureCategory.Refused"/> or vice versa) purely
+    /// because an id happened to contain the right six digits.
+    /// </remarks>
+    /// <param name="content">Raw PostgREST response body, or <c>null</c>.</param>
+    private static string? ExtractSqlState(string? content)
+    {
+        if (string.IsNullOrEmpty(content))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(content);
+            return document.RootElement.TryGetProperty("code", out var code) && code.ValueKind == JsonValueKind.String
+                ? code.GetString()
+                : null;
+        }
+        catch (JsonException)
+        {
+            // Not a PostgREST JSON error body (an HTML error page from a
+            // proxy, an empty body, ...) — no SQLSTATE to extract, fall
+            // through to the HTTP-status-only categorization.
+            return null;
+        }
     }
 }

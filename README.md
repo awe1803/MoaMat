@@ -60,7 +60,15 @@ db/item_etat.sql        Machine à états item : transitions, historique décisi
                         verrouillage des statuts terminaux, disponibilité calculée
 db/comptes.sql          Vue + RPC de l'écran /comptes
 db/storage.sql          Buckets Supabase Storage + policies d'accès par rôle
+db/item_bouteille.sql   Moteur métier Bouteilles : référentiels réglementaire/
+                        tarifaire datés, échéances à deux compteurs, bascule
+                        automatique « hors validité »
+db/campagne.sql         Campagnes de réépreuve : préparation, bordereau,
+                        retour groupé, bouteilles manquantes/condamnées
 db/tests/rls_tests.sql  Tests de sécurité RLS / rôles / audit (non destructif)
+db/tests/item_etat_tests.sql      Tests machine à états item (non destructif)
+db/tests/item_bouteille_tests.sql Tests moteur métier Bouteilles (non destructif)
+db/tests/campagne_tests.sql       Tests campagnes de réépreuve (non destructif)
 db/SECURITE.md          Modèle de sécurité + procédure de test
 db/MODELE.md            Modèle Item : stratégie d'héritage + reprise (justifié)
 supabase/functions/     Edge Functions (convention + déploiement CLI)
@@ -278,14 +286,30 @@ Dans l'éditeur SQL Supabase (ou via `psql`), exécuter **dans l'ordre** :
 11. [`db/storage.sql`](db/storage.sql) — buckets Supabase Storage
     (`materiel-photos`, `certificats-requalification`, `factures`, tous privés)
     et policies d'accès par rôle sur `storage.objects`. Ré-exécutable.
+12. [`db/item_bouteille.sql`](db/item_bouteille.sql) — moteur métier
+    Bouteilles : référentiels réglementaire/tarifaire datés (append-only),
+    échéances à deux compteurs (optique/hydraulique), bascule automatique
+    « hors validité ». Détail : [`db/MODELE.md`](db/MODELE.md) §10.
+13. [`db/campagne.sql`](db/campagne.sql) — campagnes de réépreuve
+    (préparation → envoi → retour), écritures exclusivement via RPC
+    `SECURITY DEFINER`. Détail : [`db/MODELE.md`](db/MODELE.md) §11.
 
 Tous ces scripts sont ré-exécutables. Ensuite : activer le hook
 *Custom Access Token* (Dashboard → Authentication → Hooks →
 `public.custom_access_token_hook`) et nommer le premier super-admin (requête
 documentée en bas de [`db/roles.sql`](db/roles.sql)).
 
-Tests de sécurité : `psql "$SUPABASE_DB_URL" -f db/tests/rls_tests.sql`
-(non destructif). Modèle complet : [`db/SECURITE.md`](db/SECURITE.md).
+Tests (chacun autonome et non destructif — encadré par `begin ... rollback`,
+à lancer avec un rôle non restreint) :
+
+```bash
+psql "$SUPABASE_DB_URL" -f db/tests/rls_tests.sql
+psql "$SUPABASE_DB_URL" -f db/tests/item_etat_tests.sql
+psql "$SUPABASE_DB_URL" -f db/tests/item_bouteille_tests.sql
+psql "$SUPABASE_DB_URL" -f db/tests/campagne_tests.sql
+```
+
+Modèle de sécurité complet : [`db/SECURITE.md`](db/SECURITE.md).
 
 Compte administrateur de démarrage (dev / première connexion) :
 [`db/seed_admin.sql`](db/seed_admin.sql) — crée `admin@moamat.local` /

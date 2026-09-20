@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using MoaMat.Domain.Accounts;
 using MoaMat.Domain.Audit;
 using MoaMat.Domain.Authentication;
+using MoaMat.Domain.Campaigns;
 using MoaMat.Domain.Inventory;
 using MoaMat.Domain.Locations;
 using MoaMat.Domain.Notifications;
@@ -30,6 +31,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IAuthenticationService, SupabaseAuthenticationService>();
         services.AddScoped<IAccountRepository, SupabaseAccountRepository>();
         services.AddScoped<IAuditLogRepository, SupabaseAuditLogRepository>();
+        services.AddScoped<ICampaignRepository, SupabaseCampaignRepository>();
         services.AddScoped<IInventoryRepository, SupabaseInventoryRepository>();
         services.AddScoped<ILocationRepository, SupabaseLocationRepository>();
         services.AddScoped<IPushSubscriptionRepository, SupabasePushSubscriptionRepository>();
