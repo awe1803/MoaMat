@@ -27,6 +27,9 @@ internal sealed class SupabaseCylinderRepository : ICylinderRepository
     private const string IncidentRefusedMessage =
         "Signalement refusé (droits insuffisants ou description manquante).";
 
+    private const string CorrectionRefusedMessage =
+        "Correction refusée (réservée au super-admin, motif ou données invalides).";
+
     /// <summary>
     /// Upper bound of a timeline. A cylinder has a few dozen entries over its
     /// whole life; the bound only protects against a runaway table.
@@ -60,7 +63,25 @@ internal sealed class SupabaseCylinderRepository : ICylinderRepository
                     .ConfigureAwait(false);
 
                 var record = response.Models.FirstOrDefault();
-                return record is null ? null : CylinderMapper.ToDomain(record);
+                if (record is null)
+                {
+                    return null;
+                }
+
+                // The Access id lives on the item trunk (origine_id), not on item_bouteille.
+                var origin = await _client.From<ItemViewRecord>()
+                    .Select("id,origine_table,origine_id")
+                    .Filter("id", Constants.Operator.Equals, itemId)
+                    .Limit(1)
+                    .Get(cancellationToken)
+                    .ConfigureAwait(false);
+
+                var accessId = origin.Models.FirstOrDefault() is { OrigineTable: { } table } row
+                    && table.StartsWith("bouteille", StringComparison.Ordinal)
+                    ? row.OrigineId
+                    : null;
+
+                return CylinderMapper.ToDomain(record, accessId);
             },
             cancellationToken);
 
@@ -136,6 +157,34 @@ internal sealed class SupabaseCylinderRepository : ICylinderRepository
                     ["p_date"] = ToDateString(occurredOn),
                     ["p_description"] = description.Trim(),
                     ["p_request_id"] = requestId,
+                }),
+            cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task<OperationResult> CorrectAsync(
+        CylinderCorrectionRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        return _guard.WriteAsync(
+            nameof(CorrectAsync),
+            CorrectionRefusedMessage,
+            () => _client.Rpc(
+                "corriger_bouteille",
+                new Dictionary<string, object?>(StringComparer.Ordinal)
+                {
+                    ["p_item_id"] = request.ItemId,
+                    ["p_famille"] = request.UsageCode,
+                    ["p_matiere"] = request.MaterialCode,
+                    ["p_filetage"] = request.Thread,
+                    ["p_double_sortie"] = request.HasDoubleOutlet,
+                    ["p_statut"] = request.StatusCode,
+                    ["p_date_optique"] = request.LastOpticalControlOn is { } optical ? ToDateString(optical) : null,
+                    ["p_date_hydraulique"] = request.LastHydraulicControlOn is { } hydraulic ? ToDateString(hydraulic) : null,
+                    ["p_motif"] = request.Reason,
+                    ["p_autorite"] = CylinderMapper.ToCode(request.Authority),
                 }),
             cancellationToken);
     }

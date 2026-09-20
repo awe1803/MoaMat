@@ -33,6 +33,12 @@ internal sealed class CylinderDetailRecord : BaseModel
     [Column("matiere")]
     public string? Matiere { get; set; }
 
+    [Column("filetage")]
+    public string? Filetage { get; set; }
+
+    [Column("double_sortie")]
+    public bool? DoubleSortie { get; set; }
+
     [Column("date_dernier_controle_optique")]
     public DateTime? DateDernierControleOptique { get; set; }
 

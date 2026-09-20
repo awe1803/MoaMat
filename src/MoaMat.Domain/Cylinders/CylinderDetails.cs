@@ -28,6 +28,15 @@ public sealed record CylinderDetails
     /// <summary>Raw material code, see <see cref="CylinderMaterial.FromCode"/>.</summary>
     public string? MaterialCode { get; init; }
 
+    /// <summary>Valve thread type (filetage), as recorded.</summary>
+    public string? Thread { get; init; }
+
+    /// <summary>Whether the cylinder has a double outlet; <c>null</c> when unknown.</summary>
+    public bool? HasDoubleOutlet { get; init; }
+
+    /// <summary>Identifier this cylinder had in the legacy Access database, when it came from it.</summary>
+    public long? AccessId { get; init; }
+
     /// <summary>Last optical control, if any.</summary>
     public DateOnly? LastOpticalControlOn { get; init; }
 

@@ -42,4 +42,15 @@ public interface ICylinderRepository
         string description,
         Guid requestId,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Corrects gas type, material, status and last control dates. Super-admin
+    /// only, applied atomically and audited; unlike a requalification it may
+    /// move a control date backwards.
+    /// </summary>
+    /// <param name="request">The correction (complete target state).</param>
+    /// <param name="cancellationToken">Cancels the pending request.</param>
+    Task<OperationResult> CorrectAsync(
+        CylinderCorrectionRequest request,
+        CancellationToken cancellationToken = default);
 }

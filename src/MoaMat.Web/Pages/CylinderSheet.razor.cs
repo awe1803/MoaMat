@@ -45,6 +45,18 @@ public partial class CylinderSheet : ComponentBase, IAsyncDisposable
     private DateOnly _incidentDate = Today;
     private string? _incidentDescription;
 
+    private bool _showCorrection;
+    private IReadOnlyList<ItemStatus> _statuses = [];
+    private string _corUsage = string.Empty;
+    private string _corMaterial = string.Empty;
+    private string _corThread = string.Empty;
+    private string _corDoubleOutlet = string.Empty;
+    private string _corStatus = string.Empty;
+    private string _corAuthority = string.Empty;
+    private DateOnly? _corOptical;
+    private DateOnly? _corHydraulic;
+    private string? _corReason;
+
     // Idempotency keys: generated when a form opens and kept across retries of a
     // failed save, renewed only once the save succeeded.
     private Guid _reqRequestId = Guid.NewGuid();
@@ -77,6 +89,7 @@ public partial class CylinderSheet : ComponentBase, IAsyncDisposable
     {
         _showRequalification = false;
         _showIncident = false;
+        _showCorrection = false;
         _notice = null;
         await LoadAsync();
     }
@@ -161,6 +174,7 @@ public partial class CylinderSheet : ComponentBase, IAsyncDisposable
         _showRequalification = !_showRequalification;
         _reqRequestId = Guid.NewGuid();
         _showIncident = false;
+        _showCorrection = false;
         _error = null;
     }
 
@@ -169,7 +183,107 @@ public partial class CylinderSheet : ComponentBase, IAsyncDisposable
         _showIncident = !_showIncident;
         _incidentRequestId = Guid.NewGuid();
         _showRequalification = false;
+        _showCorrection = false;
         _error = null;
+    }
+
+    /// <summary>Status codes that need a supporting document: handled by the inventory status screen, not here.</summary>
+    private static bool NeedsAttachment(string code) => code is "perdu" or "vole";
+
+    private bool IsTerminalStatus(string code) => _statuses.Any(status => status.Code == code && status.IsTerminal);
+
+    private async Task ToggleCorrectionAsync()
+    {
+        _error = null;
+        _showRequalification = false;
+        _showIncident = false;
+
+        if (_showCorrection)
+        {
+            _showCorrection = false;
+            return;
+        }
+
+        try
+        {
+            if (_statuses.Count == 0)
+            {
+                _statuses = await Items.GetStatusesAsync();
+            }
+        }
+        catch (DataAccessException exception)
+        {
+            _error = exception.Message;
+            return;
+        }
+
+        // The form starts from the current values: it sends a complete target state.
+        _corUsage = _details?.UsageCode ?? string.Empty;
+        _corMaterial = _details?.MaterialCode ?? string.Empty;
+        _corThread = _details?.Thread ?? string.Empty;
+        _corDoubleOutlet = _details?.HasDoubleOutlet switch { true => "true", false => "false", _ => string.Empty };
+        _corStatus = _item?.StatusCode ?? string.Empty;
+        _corAuthority = string.Empty;
+        _corOptical = _details?.LastOpticalControlOn;
+        _corHydraulic = _details?.LastHydraulicControlOn;
+        _corReason = null;
+        _showCorrection = true;
+    }
+
+    private async Task SaveCorrectionAsync()
+    {
+        _error = null;
+        _notice = null;
+
+        if (_item is null)
+        {
+            return;
+        }
+
+        var statusChanged = _corStatus.Length > 0 && _corStatus != _item.StatusCode;
+        if (statusChanged && IsTerminalStatus(_corStatus) && _corAuthority.Length == 0)
+        {
+            _error = "Choisissez l'autorité décisionnaire pour un statut terminal.";
+            return;
+        }
+
+        var created = CylinderCorrectionRequest.Create(
+            ItemId,
+            _corUsage,
+            _corMaterial,
+            _corThread,
+            _corDoubleOutlet.Length > 0 ? _corDoubleOutlet == "true" : null,
+            statusChanged ? _corStatus : null,
+            statusChanged && _corAuthority.Length > 0 ? Enum.Parse<TransitionAuthority>(_corAuthority) : null,
+            _corOptical,
+            _corHydraulic,
+            _corReason,
+            Today);
+
+        if (!created.Succeeded)
+        {
+            _error = created.Error;
+            return;
+        }
+
+        _isSaving = true;
+        try
+        {
+            var result = await Cylinders.CorrectAsync(created.Value!);
+            if (!result.Succeeded)
+            {
+                _error = result.Error;
+                return;
+            }
+
+            _notice = "Correction enregistrée et journalisée.";
+            _showCorrection = false;
+            await LoadAsync();
+        }
+        finally
+        {
+            _isSaving = false;
+        }
     }
 
     private async Task SaveRequalificationAsync()
@@ -336,6 +450,9 @@ public partial class CylinderSheet : ComponentBase, IAsyncDisposable
             ("Destination", Or(item.Destination)),
             ("Matière", Or(_details?.MaterialLabel)),
             ("N° peint", Or(_details?.PaintedNumber)),
+            ("ID Access", _details?.AccessId is { } accessId ? accessId.ToString(AppCulture.French) : "—"),
+            ("Filetage", Or(_details?.Thread)),
+            ("Double sortie", _details?.HasDoubleOutlet is { } dbl ? (dbl ? "Oui" : "Non") : "—"),
             ("Statut", Or(item.StatusLabel ?? item.StatusCode)),
             ("Prochaine échéance", FormatDate(item.DueOn)),
             ("Dernier contrôle optique", FormatDate(_details?.LastOpticalControlOn)),

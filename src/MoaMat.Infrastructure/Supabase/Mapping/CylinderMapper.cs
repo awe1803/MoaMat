@@ -1,5 +1,6 @@
 using MoaMat.Domain.Campaigns;
 using MoaMat.Domain.Cylinders;
+using MoaMat.Domain.Inventory;
 using MoaMat.Infrastructure.Supabase.Records;
 
 namespace MoaMat.Infrastructure.Supabase.Mapping;
@@ -12,8 +13,12 @@ internal static class CylinderMapper
 {
     /// <summary>Converts one <c>item_bouteille</c> row.</summary>
     /// <param name="record">PostgREST row.</param>
-    public static CylinderDetails ToDomain(CylinderDetailRecord record) => new()
+    /// <param name="accessId">Legacy Access identifier (<c>item.origine_id</c>), if known.</param>
+    public static CylinderDetails ToDomain(CylinderDetailRecord record, long? accessId = null) => new()
     {
+        Thread = record.Filetage,
+        HasDoubleOutlet = record.DoubleSortie,
+        AccessId = accessId,
         ItemId = record.ItemId,
         PaintedNumber = record.NumPeint,
         VolumeLitres = record.VolumeNominalL,
@@ -61,6 +66,16 @@ internal static class CylinderMapper
         CampaignLineOutcome.Passed => "conforme",
         CampaignLineOutcome.Failed => "echec",
         _ => throw new ArgumentOutOfRangeException(nameof(outcome), outcome, "Unknown outcome."),
+    };
+
+    /// <summary>Database code of a deciding authority (<c>statut_autorite</c>), or <c>null</c>.</summary>
+    /// <param name="authority">Authority.</param>
+    public static string? ToCode(TransitionAuthority? authority) => authority switch
+    {
+        TransitionAuthority.OrganismeControle => "organisme_controle",
+        TransitionAuthority.Ca => "ca",
+        TransitionAuthority.GestionnaireMateriel => "gestionnaire_materiel",
+        _ => null,
     };
 
     private static CylinderEventType ToType(string code) => code switch

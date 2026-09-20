@@ -82,7 +82,97 @@
                         Signaler un incident
                     </button>
                 </AuthorizeView>
+                <AuthorizeView Policy="@AuthorizationPolicyNames.SuperAdministrator" Context="superAdmin">
+                    <button type="button" class="btn" @onclick="ToggleCorrectionAsync" disabled="@_isSaving"
+                            aria-expanded="@_showCorrection">
+                        <Icon Name="edit" Size="14" />
+                        Corriger la fiche
+                    </button>
+                </AuthorizeView>
             </div>
+
+            @if (_showCorrection)
+            {
+                <form class="fiche-panel" @onsubmit="SaveCorrectionAsync">
+                    <h2 class="section-title">Corriger la fiche (super-admin)</h2>
+                    <div class="form-grid">
+                        <label class="field">
+                            <span>Type de gaz</span>
+                            <select @bind="_corUsage">
+                                <option value="">— inconnu —</option>
+                                @foreach (var usage in CylinderUsage.All)
+                                {
+                                    <option value="@usage.Code">@usage.DisplayName</option>
+                                }
+                            </select>
+                        </label>
+                        <label class="field">
+                            <span>Matière</span>
+                            <select @bind="_corMaterial">
+                                <option value="">— inconnue —</option>
+                                @foreach (var material in CylinderMaterial.All)
+                                {
+                                    <option value="@material.Code">@material.DisplayName</option>
+                                }
+                            </select>
+                        </label>
+                        <label class="field">
+                            <span>Filetage</span>
+                            <input type="text" @bind="_corThread" maxlength="40" />
+                        </label>
+                        <label class="field">
+                            <span>Double sortie</span>
+                            <select @bind="_corDoubleOutlet">
+                                <option value="">— inconnu —</option>
+                                <option value="true">Oui</option>
+                                <option value="false">Non</option>
+                            </select>
+                        </label>
+                        <label class="field">
+                            <span>Statut</span>
+                            <select @bind="_corStatus">
+                                @foreach (var status in _statuses.Where(s => !NeedsAttachment(s.Code) || s.Code == _item.StatusCode))
+                                {
+                                    <option value="@status.Code">@status.Label</option>
+                                }
+                            </select>
+                        </label>
+                        @if (_corStatus != _item.StatusCode && IsTerminalStatus(_corStatus))
+                        {
+                            <label class="field">
+                                <span>Autorité décisionnaire</span>
+                                <select @bind="_corAuthority">
+                                    <option value="">— à choisir —</option>
+                                    <option value="@nameof(TransitionAuthority.OrganismeControle)">Organisme de contrôle</option>
+                                    <option value="@nameof(TransitionAuthority.Ca)">Conseil d'administration</option>
+                                    <option value="@nameof(TransitionAuthority.GestionnaireMateriel)">Gestionnaire matériel</option>
+                                </select>
+                            </label>
+                        }
+                        <label class="field">
+                            <span>Dernier contrôle optique</span>
+                            <input type="date" @bind="_corOptical" max="@Today.ToString("yyyy-MM-dd")" />
+                        </label>
+                        <label class="field">
+                            <span>Dernier contrôle hydraulique</span>
+                            <input type="date" @bind="_corHydraulic" max="@Today.ToString("yyyy-MM-dd")" />
+                        </label>
+                    </div>
+                    <label class="field">
+                        <span>Motif de la correction</span>
+                        <textarea rows="2" @bind="_corReason" required></textarea>
+                    </label>
+                    <p class="msg-info">
+                        Une correction rectifie la fiche sans créer de contrôle : elle peut faire reculer une date
+                        et n'ajoute rien à la chronologie. Elle est journalisée (avant / après) ; un changement de
+                        statut apparaît dans la chronologie. Perdu / Volé se règle depuis l'inventaire (pièce jointe requise).
+                    </p>
+                    <div class="btn-row">
+                        <button type="submit" class="btn primary" disabled="@_isSaving">Enregistrer la correction</button>
+                        <button type="button" class="btn" @onclick="ToggleCorrectionAsync" disabled="@_isSaving">Annuler</button>
+                    </div>
+                </form>
+            }
 
             @if (_showRequalification)
             {
