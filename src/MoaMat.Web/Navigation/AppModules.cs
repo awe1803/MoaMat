@@ -52,6 +52,16 @@ public static class AppModules
             subtitle: "réservations",
             tag: "phase 2",
             text: "Saisie par scan de deux QR codes (membre + matériel) — trois tentatives de saisie manuelle ont échoué par le passé."),
+        new()
+        {
+            Key = "campagnes",
+            Group = "Opérations",
+            Icon = "campagnes",
+            Title = "Campagnes de réépreuve",
+            Subtitle = "préparation, envoi, retour",
+            Href = "campagnes/preparer",
+            Policy = AuthorizationPolicyNames.ManagerOrHigher,
+        },
         Planned(
             key: "membres",
             group: "Opérations",

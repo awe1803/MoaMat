@@ -47,6 +47,7 @@ public partial class Icon : ComponentBase
         ["menu"] = """<path d="M4 6h16M4 12h16M4 18h16"/>""",
         ["logout"] = """<path d="M15 17l5-5-5-5M20 12H9M12 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h6"/>""",
         ["clock"] = """<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>""",
+        ["campagnes"] = """<path d="M3 8 12 3l9 5-9 5-9-5Z"/><path d="M3 8v8l9 5 9-5V8M12 13v8"/>""",
     }.ToFrozenDictionary(StringComparer.Ordinal);
 
     /// <summary>Catalogue key of the glyph to draw; an unknown key draws nothing.</summary>

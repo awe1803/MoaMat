@@ -1,0 +1,171 @@
+@page "/campagnes/retour"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using MoaMat.Domain.Accounts
+@using MoaMat.Domain.Campaigns
+
+<PageTitle>Retour de campagne — MoaMat</PageTitle>
+
+<AuthorizeView Policy="@AuthorizationPolicyNames.ManagerOrHigher">
+    <NotAuthorized>
+        <div class="page-head"><h1>Retour de campagne</h1></div>
+        <p class="msg-error" role="alert">
+            Cet écran est réservé aux rôles <strong>gestion</strong> et au-dessus.
+        </p>
+    </NotAuthorized>
+    <Authorized>
+        <div class="page-head">
+            <h1>Retour de campagne</h1>
+            <div class="sub">
+                Pointage groupé des bouteilles reçues, saisie du coût réel et du certificat.
+                Une bouteille envoyée jamais pointée reste signalée comme manquante — aucune
+                bascule de statut automatique.
+            </div>
+        </div>
+
+        @if (_error is not null)
+        {
+            <p class="msg-error" role="alert">@_error</p>
+        }
+
+        @if (_isBusy)
+        {
+            <p class="msg-muted">Chargement…</p>
+        }
+        else if (_campaign is null)
+        {
+            @if (_campaigns.Count == 0)
+            {
+                <div class="data-list"><p class="data-empty">Aucune campagne envoyée.</p></div>
+            }
+            else
+            {
+                <div class="table-scroll">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Campagne</th>
+                                <th>Prestataire</th>
+                                <th>Bordereau</th>
+                                <th>Statut</th>
+                                <th>Manquantes</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var campaign in _campaigns)
+                            {
+                                <tr>
+                                    <td>#@campaign.Id</td>
+                                    <td>@campaign.Provider</td>
+                                    <td>@(campaign.BordereauNumber ?? "—")</td>
+                                    <td>@(campaign.Status == CampaignStatus.Sent ? "Envoyée" : "Retournée")</td>
+                                    <td>
+                                        @if (campaign.Status == CampaignStatus.Returned && campaign.MissingLines.Any())
+                                        {
+                                            <span class="badge expire">@campaign.MissingLines.Count() manquante(s)</span>
+                                        }
+                                        else
+                                        {
+                                            <text>—</text>
+                                        }
+                                    </td>
+                                    <td><a class="btn btn-sm" href="@RouteFor(campaign.Id)">Ouvrir</a></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        }
+        else
+        {
+            <div class="page-head">
+                <div class="sub">
+                    Campagne #@_campaign.Id — @_campaign.Provider — bordereau @_campaign.BordereauNumber
+                </div>
+            </div>
+
+            <div class="table-scroll">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Reçue</th>
+                            <th>Code club</th>
+                            <th>Prestation</th>
+                            <th>Résultat</th>
+                            <th>N° certificat</th>
+                            <th>Coût réel (€)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var line in _campaign.Lines)
+                        {
+                            var alreadyPointed = line.ReturnedOn is not null;
+                            var rowDisabled = alreadyPointed || _isSubmitting;
+                            <tr class="@(line.IsMissing(_campaign.Status) ? "row-off" : null)">
+                                <td>
+                                    <input type="checkbox"
+                                           checked="@_received.GetValueOrDefault(line.Id)"
+                                           disabled="@rowDisabled"
+                                           @onchange="e => _received[line.Id] = (bool)(e.Value ?? false)" />
+                                </td>
+                                <td>
+                                    @(line.ItemClubCode ?? "—")
+                                    @if (alreadyPointed)
+                                    {
+                                        <span class="badge on" title="@($"Pointée le {line.ReturnedOn:dd/MM/yyyy}")">déjà pointée</span>
+                                    }
+                                    @if (line.IsMissing(_campaign.Status))
+                                    {
+                                        <span class="badge expire">manquante</span>
+                                    }
+                                    @if (line.RequiresManualFollowUp)
+                                    {
+                                        <span class="badge expire" title="Bouteille condamnée : à déclasser manuellement via l'inventaire">
+                                            à déclasser
+                                        </span>
+                                    }
+                                </td>
+                                <td>@(line.ServiceType?.DisplayName ?? "—")</td>
+                                <td>
+                                    <select value="@(_outcomes.GetValueOrDefault(line.Id)?.ToString() ?? string.Empty)"
+                                            disabled="@rowDisabled"
+                                            @onchange="e => _outcomes[line.Id] = ParseOutcome(e.Value as string)"
+                                            aria-label="@($"Résultat pour {line.ItemClubCode}")">
+                                        <option value="" disabled>— à choisir —</option>
+                                        <option value="@nameof(CampaignLineOutcome.Passed)">Conforme</option>
+                                        <option value="@nameof(CampaignLineOutcome.Failed)">Échec (à déclasser)</option>
+                                    </select>
+                                </td>
+                                <td>
+                                    <input type="text" value="@_certificateNumbers.GetValueOrDefault(line.Id)"
+                                           disabled="@rowDisabled"
+                                           @onchange="e => _certificateNumbers[line.Id] = (e.Value as string) ?? string.Empty" />
+                                </td>
+                                <td>
+                                    <input type="number" step="0.01" min="0" placeholder="—"
+                                           value="@_actualCosts.GetValueOrDefault(line.Id)?.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                                           disabled="@rowDisabled"
+                                           @onchange="e => _actualCosts[line.Id] = decimal.TryParse(e.Value as string, out var v) ? v : null" />
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            @if (_campaign.Status == CampaignStatus.Sent)
+            {
+                <div class="toolbar">
+                    <label>
+                        Date de retour
+                        <input type="date" @bind="_returnedOn" />
+                    </label>
+                    <button type="button" class="btn" @onclick="RecordReturnAsync" disabled="@_isSubmitting">
+                        Valider le retour
+                    </button>
+                </div>
+            }
+        }
+    </Authorized>
+</AuthorizeView>
