@@ -69,7 +69,29 @@
                                             <text>—</text>
                                         }
                                     </td>
-                                    <td><a class="btn btn-sm" href="@RouteFor(campaign.Id)">Ouvrir</a></td>
+                                    <td>
+                                        <a class="btn btn-sm" href="@RouteFor(campaign.Id)">Ouvrir</a>
+                                        <AuthorizeView Policy="@AuthorizationPolicyNames.SuperAdministrator" Context="superAdmin">
+                                            @if (_pendingDeleteId == campaign.Id)
+                                            {
+                                                <span class="msg-muted">Suppression définitive, irréversible.</span>
+                                                <button type="button" class="btn btn-sm danger"
+                                                        @onclick="() => DeleteCampaignAsync(campaign)" disabled="@_isSubmitting">
+                                                    Confirmer
+                                                </button>
+                                                <button type="button" class="btn btn-sm" @onclick="CancelDelete" disabled="@_isSubmitting">
+                                                    Annuler
+                                                </button>
+                                            }
+                                            else
+                                            {
+                                                <button type="button" class="btn btn-sm danger"
+                                                        @onclick="() => RequestDelete(campaign)" disabled="@_isSubmitting">
+                                                    Supprimer
+                                                </button>
+                                            }
+                                        </AuthorizeView>
+                                    </td>
                                 </tr>
                             }
                         </tbody>

@@ -44,6 +44,9 @@ internal sealed class SupabaseCampaignRepository : ICampaignRepository
     private const string ReturnRefusedMessage =
         "Enregistrement du retour refusé (droits insuffisants ou campagne non envoyée).";
 
+    private const string DeleteRefusedMessage =
+        "Suppression refusée (réservée au super-admin, ou campagne introuvable).";
+
     private readonly global::Supabase.Client _client;
     private readonly SupabaseCallGuard _guard;
 
@@ -304,6 +307,17 @@ internal sealed class SupabaseCampaignRepository : ICampaignRepository
             }),
             cancellationToken);
     }
+
+    /// <inheritdoc />
+    public Task<OperationResult> DeleteCampaignAsync(long campaignId, CancellationToken cancellationToken = default) =>
+        _guard.WriteAsync(
+            nameof(DeleteCampaignAsync),
+            DeleteRefusedMessage,
+            () => _client.Rpc("supprimer_campagne", new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                ["p_campagne_id"] = campaignId,
+            }),
+            cancellationToken);
 
     private static string ToDateString(DateOnly date) => date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 }

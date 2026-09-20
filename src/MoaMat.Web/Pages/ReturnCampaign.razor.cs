@@ -203,4 +203,43 @@ public partial class ReturnCampaign : ComponentBase
     /// <summary>Deep link opening this screen on one campaign's return.</summary>
     /// <param name="campaignId">Campaign to open.</param>
     private static string RouteFor(long campaignId) => $"campagnes/retour?id={campaignId}";
+
+    /// <summary>
+    /// Campaign awaiting a second click before its deletion is actually sent —
+    /// same two-click confirmation as the account screen: the row itself is
+    /// the confirmation step. Only ever set from the super-admin-only button.
+    /// </summary>
+    private long? _pendingDeleteId;
+
+    private void RequestDelete(Campaign campaign) => _pendingDeleteId = campaign.Id;
+
+    private void CancelDelete() => _pendingDeleteId = null;
+
+    private async Task DeleteCampaignAsync(Campaign campaign)
+    {
+        if (_isSubmitting)
+        {
+            return;
+        }
+
+        _isSubmitting = true;
+
+        try
+        {
+            var result = await Campaigns.DeleteCampaignAsync(campaign.Id);
+            _pendingDeleteId = null;
+
+            // ReloadAsync() clears _error first, so a refusal is applied after it.
+            await ReloadAsync();
+
+            if (!result.Succeeded)
+            {
+                _error = result.Error;
+            }
+        }
+        finally
+        {
+            _isSubmitting = false;
+        }
+    }
 }

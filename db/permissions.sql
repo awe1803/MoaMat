@@ -117,6 +117,7 @@ insert into public.permission (code, description) values
     ('campagne.read',             'Consulter les campagnes de réépreuve'),
     ('campagne.create',           'Créer une campagne de réépreuve'),
     ('campagne.update',           'Préparer, envoyer et pointer le retour d''une campagne'),
+    ('campagne.delete',           'Supprimer une campagne de réépreuve (super-admin uniquement)'),
     -- Achats / factures / réceptions (données financières)
     ('achat.read',                'Consulter les achats et factures'),
     ('achat.create',              'Créer un achat / une facture'),
@@ -230,7 +231,7 @@ insert into public.role_permission (role, permission_code) values
     ('super-admin', 'personne.read'),    ('super-admin', 'personne.create'),    ('super-admin', 'personne.update'),    ('super-admin', 'personne.delete'),
     ('super-admin', 'fournisseur.read'), ('super-admin', 'fournisseur.create'), ('super-admin', 'fournisseur.update'), ('super-admin', 'fournisseur.delete'),
     ('super-admin', 'referentiel.read'), ('super-admin', 'referentiel.create'), ('super-admin', 'referentiel.update'), ('super-admin', 'referentiel.delete'),
-    ('super-admin', 'campagne.read'),    ('super-admin', 'campagne.create'),    ('super-admin', 'campagne.update'),
+    ('super-admin', 'campagne.read'),    ('super-admin', 'campagne.create'),    ('super-admin', 'campagne.update'),  ('super-admin', 'campagne.delete'),
     ('super-admin', 'achat.read'),       ('super-admin', 'achat.create'),       ('super-admin', 'achat.update'),       ('super-admin', 'achat.delete'),
     ('super-admin', 'devis.read'),       ('super-admin', 'devis.create'),       ('super-admin', 'devis.update'),       ('super-admin', 'devis.delete'),
     ('super-admin', 'role.read'),        ('super-admin', 'role.assign'),        ('super-admin', 'role.assign_admin'),

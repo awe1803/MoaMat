@@ -429,6 +429,13 @@ dépense réelle). L'écran `/campagnes` n'a d'ailleurs aucun mode lecture
 seule : `ManagerOrHigher` (gestion+) est son seul point d'entrée, aligné avec
 `campagne.read`/`create`/`update` accordées à gestion/admin/super-admin.
 
+**Suppression** : `public.supprimer_campagne()` (permission `campagne.delete`, accordée au
+**seul super-admin**) supprime une campagne quel que soit son statut, pour le cas où elle
+ne peut pas avoir lieu. Si elle était `envoyee`, ses bouteilles encore `en_controle` sont
+remises `en_stock` ; pour `preparation` et `retournee` aucun statut de bouteille n'est
+touché. Journalisé (`campagne.deleted`). Côté UI : bouton « Supprimer » à confirmation en
+deux clics, visible sous la politique `SuperAdministrator`.
+
 `public.creer_campagne()` valide chaque bouteille sélectionnée — existante,
 de la famille `bouteille` (une ligne `item_bouteille`), active, et dans un
 statut non terminal — et refuse avec un message précis sinon : ce mécanisme

@@ -110,4 +110,15 @@ public interface ICampaignRepository
         DateOnly returnedOn,
         IReadOnlyCollection<CampaignReturnLine> lines,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Permanently deletes a campaign and its lines, whatever its status.
+    /// Reserved to the super-administrator (the database refuses anyone else).
+    /// For a campaign already "envoyée", its bottles still "En contrôle" go
+    /// back to "En stock". Idempotent only in outcome: a retry on an
+    /// already-deleted campaign is refused as "not found".
+    /// </summary>
+    /// <param name="campaignId">Campaign to delete.</param>
+    /// <param name="cancellationToken">Cancels the pending request.</param>
+    Task<OperationResult> DeleteCampaignAsync(long campaignId, CancellationToken cancellationToken = default);
 }

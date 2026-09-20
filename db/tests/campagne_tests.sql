@@ -39,6 +39,9 @@
 --       contrôle et le statut de la bouteille ne sont JAMAIS touchés.
 --    8. Envoi refusé si une bouteille est devenue inéligible (déclassée)
 --       PENDANT la préparation, entre la création et l'envoi de la campagne.
+--    9. Suppression réservée au super-admin (refusée à "gestion") ; une campagne
+--       envoyée remet ses bouteilles en_controle en en_stock, les autres statuts
+--       ne sont pas touchés.
 -- =============================================================================
 
 begin;
@@ -613,6 +616,78 @@ select moamat_test.expect(
 select moamat_test.expect(
     'envoi refuse — la bouteille declassee reste "perdu" (statut non ecrase)',
     (select statut_code from public.item where id = 999200009) = 'perdu');
+
+-- =============================================================================
+--  9. Suppression — super-admin uniquement
+-- =============================================================================
+
+-- Rôle courant : gestion (c1) — refusé, même avec campagne.update.
+select moamat_test.expect_raises(
+    'suppression — refusee pour le role gestion',
+    format($q$ select public.supprimer_campagne(%s) $q$, (select id from moamat_test.t_campagne6)));
+
+select moamat_test.expect(
+    'suppression refusee — la campagne existe toujours',
+    exists (select 1 from public.campagne where id = (select id from moamat_test.t_campagne6)));
+
+reset role;
+
+insert into auth.users (instance_id, id, aud, role, email,
+                        encrypted_password, email_confirmed_at,
+                        created_at, updated_at,
+                        raw_app_meta_data, raw_user_meta_data)
+values ('00000000-0000-0000-0000-000000000000', '00000000-0000-0000-0000-0000000000c2',
+        'authenticated', 'authenticated', 'campagne-test-2@moamat.test',
+        '', now(), now(), now(), '{}'::jsonb, '{}'::jsonb);
+
+update public.utilisateur_role set role = 'super-admin' where user_id = '00000000-0000-0000-0000-0000000000c2';
+
+select set_config('request.jwt.claims',
+    json_build_object('sub', '00000000-0000-0000-0000-0000000000c2', 'email', 'campagne-test-2@moamat.test', 'role', 'authenticated')::text,
+    true);
+set local role authenticated;
+
+select moamat_test.expect('setup — role courant = super-admin', public.moamat_current_role() = 'super-admin');
+
+-- Campagne "envoyee" (bouteille 999200007 en_controle) : supprimée, la
+-- bouteille revient en stock.
+select moamat_test.expect(
+    'suppression — pre-condition : bouteille de la campagne envoyee en en_controle',
+    (select statut_code from public.item where id = 999200007) = 'en_controle');
+
+select public.supprimer_campagne((select id from moamat_test.t_campagne6));
+
+select moamat_test.expect(
+    'suppression — campagne envoyee supprimee (campagne et lignes)',
+    not exists (select 1 from public.campagne where id = (select id from moamat_test.t_campagne6))
+    and not exists (select 1 from public.campagne_ligne where campagne_id = (select id from moamat_test.t_campagne6)));
+
+select moamat_test.expect(
+    'suppression — bouteille d''une campagne envoyee remise en en_stock',
+    (select statut_code from public.item where id = 999200007) = 'en_stock');
+
+-- Campagne "retournee" : supprimée, mais la bouteille manquante (999200002,
+-- jamais pointée) n'est PAS touchée — elle reste à résoudre manuellement.
+select public.supprimer_campagne((select id from moamat_test.t_campagne));
+
+select moamat_test.expect(
+    'suppression — campagne retournee supprimee',
+    not exists (select 1 from public.campagne where id = (select id from moamat_test.t_campagne)));
+
+select moamat_test.expect(
+    'suppression — campagne retournee : statut des bouteilles inchange',
+    (select statut_code from public.item where id = 999200002) = 'en_controle');
+
+-- Campagne en préparation : supprimée sans toucher aux statuts.
+select public.supprimer_campagne((select id from moamat_test.t_campagne8));
+
+select moamat_test.expect(
+    'suppression — campagne en preparation supprimee',
+    not exists (select 1 from public.campagne where id = (select id from moamat_test.t_campagne8)));
+
+select moamat_test.expect_raises(
+    'suppression — campagne inexistante refusee',
+    $q$ select public.supprimer_campagne(999999999) $q$);
 
 reset role;
 

@@ -756,6 +756,77 @@ revoke execute on function public.pointer_retour_campagne(bigint, date, jsonb) f
 grant execute on function public.pointer_retour_campagne(bigint, date, jsonb) to authenticated;
 
 -- -----------------------------------------------------------------------------
+--  6bis. Suppression — super-admin uniquement, pour une campagne devenue
+--  irréalisable (prestataire injoignable, envoi annulé, saisie erronée…).
+-- -----------------------------------------------------------------------------
+
+create or replace function public.supprimer_campagne(p_campagne_id bigint)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+    v_campagne public.campagne%rowtype;
+    v_item_ids bigint[];
+    v_item_id  bigint;
+begin
+    if not public.has_permission('campagne.delete') then
+        raise exception 'Droit insuffisant : permission « campagne.delete » requise.'
+            using errcode = 'insufficient_privilege';
+    end if;
+
+    -- "for update" : sérialise avec envoyer_campagne / pointer_retour_campagne,
+    -- pour qu'une bascule concurrente ne se glisse pas entre la lecture du
+    -- statut et la suppression.
+    select * into v_campagne from public.campagne where id = p_campagne_id for update;
+
+    if not found then
+        raise exception 'Campagne introuvable : %.', p_campagne_id using errcode = 'no_data_found';
+    end if;
+
+    select array_agg(item_id order by item_id) into v_item_ids
+    from public.campagne_ligne where campagne_id = p_campagne_id;
+
+    -- Campagne envoyée, retour jamais pointé (pointer_retour_campagne la fait
+    -- passer en "retournee" dès le premier pointage) : ses bouteilles sont
+    -- toutes en "en_controle" à cause de l'envoi. La campagne n'aura pas lieu :
+    -- elles reviennent en stock. Une campagne "preparation" n'a encore touché
+    -- aucun statut ; une campagne "retournee" a déjà rendu ses bouteilles
+    -- (les manquantes / condamnées restent à résoudre manuellement).
+    if v_campagne.statut = 'envoyee' then
+        for v_item_id in
+            select i.id from public.item i
+            join public.campagne_ligne l on l.item_id = i.id
+            where l.campagne_id = p_campagne_id and i.statut_code = 'en_controle'
+            order by i.id
+        loop
+            update public.item
+            set statut_code = 'en_stock',
+                statut_motif = format('Campagne de réépreuve n°%s supprimée : bouteille remise en stock', p_campagne_id),
+                statut_date_effet = current_date
+            where id = v_item_id;
+        end loop;
+    end if;
+
+    delete from public.campagne where id = p_campagne_id;  -- lignes : on delete cascade
+
+    perform public.audit_write(
+        'campagne.deleted',
+        'campagne',
+        p_campagne_id::text,
+        to_jsonb(v_campagne) || jsonb_build_object('item_ids', coalesce(to_jsonb(v_item_ids), '[]'::jsonb)),
+        null,
+        '{}'::jsonb);
+end $$;
+
+comment on function public.supprimer_campagne(bigint) is
+    'Supprime une campagne (quel que soit son statut) et ses lignes. Exige "campagne.delete", accordée au seul rôle super-admin. Si la campagne était "envoyee", ses bouteilles encore en "en_controle" sont remises en "en_stock" (via le trigger de transition, motif + historique). Verrouille la campagne ("for update"). Journalisé (campagne.deleted, avec l''état supprimé et les item_ids).';
+
+revoke execute on function public.supprimer_campagne(bigint) from public;
+grant execute on function public.supprimer_campagne(bigint) to authenticated;
+
+-- -----------------------------------------------------------------------------
 --  7. Vue de lecture — code club résolu, pratique pour les écrans.
 -- -----------------------------------------------------------------------------
 
