@@ -164,8 +164,10 @@ quelle. Seul un **drapeau** est calculé.
 
 Un `code_club` est marqué ambigu (`item.code_club_ambigu = true`) si :
 
-- **doublon** : la même valeur (casse et espaces ignorés) porte sur > 1 item ; ou
-- **non structurant** : il ne suit pas le motif attendu
+- **doublon** : la même valeur (casse et espaces ignorés) porte sur > 1 item.
+
+Un code **non structurant** n'est **pas** ambigu : il reste seulement signalé
+(`est_non_structurant`, `code_club_non_structurant`). Il ne suit pas le motif attendu
   `^[A-Za-z]{1,4}[[:space:]./-]?[0-9]{1,5}$`
   (1 à 4 lettres, séparateur optionnel, 1 à 5 chiffres — ex. `B123`, `DET-45`,
   `MD 007`). Motif **volontairement large et ajustable** :
