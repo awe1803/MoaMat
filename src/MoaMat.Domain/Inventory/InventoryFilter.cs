@@ -31,6 +31,24 @@ public sealed record InventoryFilter
     /// <summary>Keep only items whose due date is on or before this date.</summary>
     public DateOnly? DueOnOrBefore { get; init; }
 
+    /// <summary>
+    /// Keep only items in one validity band (<see cref="DueStatus.Overdue"/>,
+    /// <see cref="DueStatus.DueSoon"/> or <see cref="DueStatus.Valid"/>) as of
+    /// <see cref="ReferenceDay"/>. Items without a due date match no band.
+    /// <c>null</c> (or <see cref="DueStatus.Unknown"/>) applies no restriction.
+    /// </summary>
+    public DueStatus? DueBand { get; init; }
+
+    /// <summary>Day the validity band is read against; defaults to today's date.</summary>
+    public DateOnly ReferenceDay { get; init; } = DateOnly.FromDateTime(DateTime.Now);
+
+    /// <summary>
+    /// Free text matched (case-insensitively, as a substring) against club
+    /// code, serial number, brand, model and storage path. Blank applies no
+    /// restriction.
+    /// </summary>
+    public string? SearchText { get; init; }
+
     /// <summary>Which activation states to include.</summary>
     public ActivationScope Activation { get; init; } = ActivationScope.ActiveOnly;
 

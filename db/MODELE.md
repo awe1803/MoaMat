@@ -51,6 +51,7 @@ Access CSV ─► [schema.sql + initial_load.sql]      staging (miroir, inchang�
 | 11 | `comptes.sql`       | écran /comptes |
 | 12 | `storage.sql`       | buckets Storage |
 | 13 | **`campagne.sql`**  | **campagnes de réépreuve : préparation, bordereau, retour groupé, bouteilles manquantes — voir `MODELE.md` §11** |
+| 14 | **`bouteille_evenement.sql`** | **chronologie d'une bouteille : reprise des 412 réépreuves (jointure par ID interne, 3 orphelins traités), requalification, incident — voir `MODELE.md` §12** |
 
 ### Transition / repli
 
@@ -547,3 +548,52 @@ antérieure, sélection invalide…) remontait comme une erreur inattendue
 plutôt que comme le refus déterministe qu'elle est réellement.
 
 Tests : [`db/tests/campagne_tests.sql`](tests/campagne_tests.sql).
+
+---
+
+## 12. Historique des événements d'une bouteille ([`db/bouteille_evenement.sql`](bouteille_evenement.sql))
+
+Alimente la **chronologie de la fiche bouteille** (`/bouteilles/{id}`) et
+reprend les **412 événements** de `Tbl_B2_Réépreuves` (miroir
+`bouteille_requalification`) dans `public.bouteille_evenement` (types :
+`mise_en_service`, `controle_optique`, `controle_hydraulique`, `ecartee`,
+`rebut`, `incident`).
+
+### Jointure réelle : l'ID interne, pas le n° peint
+
+Le champ Access `N° Identbout` de `Tbl_B2_Réépreuves` contient l'**ID interne**
+de la bouteille, pas le n° peint sur le fût (voir `Access_Data/Nommage_tables_MOANA.md`).
+La reprise joint donc **uniquement** sur `item.origine_id`
+(`origine_table = 'bouteille'`), jamais sur `item_bouteille.num_peint`. Piège
+concret : la bouteille d'id **18** porte le n° peint **49** — une jointure sur
+le n° peint lui rattacherait à tort les événements de l'id 49.
+
+### Les 3 orphelins (ids 24, 25, 49 — 33 événements)
+
+| id | Résolution | Événements |
+|----|------------|-----------:|
+| 24 | existe dans `bouteille_sortie_inventaire` (BOUT-S-62) → rattaché à cet item | 11 |
+| 25 | existe dans `bouteille_sortie_inventaire` (BOUT-S-66) → rattaché à cet item | 10 |
+| 49 | **n'existe nulle part** → consigné verbatim dans `item_reject` (`origine_table = 'bouteille_requalification'`, `colonne = 'bouteille_id'`), à arbitrer par le gestionnaire | 12 |
+
+Les espaces d'ID de `bouteille` et `bouteille_sortie_inventaire` sont disjoints
+(vérifié sur l'export) : la résolution de 24 et 25 est sans ambiguïté, et
+`bouteille` reste prioritaire si un id venait à figurer dans les deux.
+Bilan : **412 = 400 rattachés + 12 rejetés**, écart 0 (NOTICE en fin de script).
+Aucun événement n'est rattaché « au plus proche » ni supprimé.
+
+Reprise **idempotente** (`origine_id` unique) ; `transform_item.sql` réattribue
+les `item.id` et vide la table (cascade) : rejouer `bouteille_evenement.sql`
+après lui. La reprise ne modifie pas les compteurs de contrôle. Le résultat
+(`conforme`/`echec`) n'existe pas dans Access : il est `NULL` pour l'historique.
+
+### Écritures depuis l'appli
+
+`public.bouteille_evenement` n'a **aucune** policy insert/update/delete :
+`enregistrer_requalification_bouteille()` (`conforme` → compteur de contrôle
+mis à jour sans jamais reculer, échéance recalculée par trigger ; `echec` →
+événement seul, déclassement manuel) et `signaler_incident_bouteille()` (trace
+seule, ne change jamais le statut). Toutes deux exigent `item.update` et sont
+journalisées (`bouteille.requalification`, `bouteille.incident`).
+
+Tests : [`db/tests/bouteille_evenement_tests.sql`](tests/bouteille_evenement_tests.sql).

@@ -65,10 +65,13 @@ db/item_bouteille.sql   Moteur métier Bouteilles : référentiels réglementair
                         automatique « hors validité »
 db/campagne.sql         Campagnes de réépreuve : préparation, bordereau,
                         retour groupé, bouteilles manquantes/condamnées
+db/bouteille_evenement.sql Chronologie bouteille : reprise des 412 réépreuves (ID interne),
+                        requalification, signalement d'incident
 db/tests/rls_tests.sql  Tests de sécurité RLS / rôles / audit (non destructif)
 db/tests/item_etat_tests.sql      Tests machine à états item (non destructif)
 db/tests/item_bouteille_tests.sql Tests moteur métier Bouteilles (non destructif)
 db/tests/campagne_tests.sql       Tests campagnes de réépreuve (non destructif)
+db/tests/bouteille_evenement_tests.sql Tests chronologie bouteille (non destructif)
 db/SECURITE.md          Modèle de sécurité + procédure de test
 db/MODELE.md            Modèle Item : stratégie d'héritage + reprise (justifié)
 supabase/functions/     Edge Functions (convention + déploiement CLI)

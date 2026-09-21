@@ -15,11 +15,12 @@ namespace MoaMat.Web.Pages;
 /// string rather than in fields. That is what lets a dashboard tile, the alert
 /// banner and the top bar search open this screen already filtered, and what
 /// makes the back button of the browser behave.</para>
-/// <para>Family, status, location and activation are pushed down to the
-/// database; validity and free text are applied on the page. Validity is a
-/// window around today that the repository filter cannot express, and the free
-/// text search spans five columns — both would otherwise cost a round trip per
-/// keystroke for a list the client already holds.</para>
+/// <para>Every criterion — family, status, location, activation, validity chip
+/// and free text — is pushed down to the database
+/// (<see cref="InventoryFilter"/>): the browser never filters the inventory
+/// itself, and the chip counters are counted by the database too, so they stay
+/// right even when the list is capped at <see cref="InventoryFilter.MaxAllowedResults"/>.
+/// A change of family, chip or search text therefore costs one round trip.</para>
 /// </remarks>
 public partial class Inventory : ComponentBase
 {
@@ -36,8 +37,6 @@ public partial class Inventory : ComponentBase
 
     private readonly List<InventoryItem> _items = [];
 
-    private IReadOnlyList<InventoryItem> _visible = [];
-
     private IReadOnlyList<ItemStatus> _statuses = [];
     private IReadOnlyList<LocationPath> _containers = [];
 
@@ -49,8 +48,20 @@ public partial class Inventory : ComponentBase
     private bool _ambiguousCodesOnly;
 
     private string? _loadedFamily;
+    private string? _loadedDue;
+    private string? _loadedSearch;
     private bool _isBusy = true;
     private string? _error;
+
+    // Counters of the four validity chips, counted by the database.
+    private int _countAll;
+    private int _countOverdue;
+    private int _countSoon;
+    private int _countValid;
+
+    // Guards against an older, slower response overwriting a newer one when
+    // the user changes the filter faster than the network answers.
+    private int _loadSequence;
 
     /// <summary>Family the list is restricted to, from the <c>famille</c> query parameter.</summary>
     [Parameter]
@@ -83,13 +94,8 @@ public partial class Inventory : ComponentBase
     private string PageHeading =>
         Family is null ? "Inventaire" : ItemFamily.DisplayNameFor(Family);
 
-    /// <summary>
-    /// Rows left once the validity chip and the free text are applied. Computed
-    /// by <see cref="RefreshView"/> rather than on read: the markup consults it
-    /// several times per render, and re-filtering a thousand rows each time
-    /// would be paid on every keystroke.
-    /// </summary>
-    private IReadOnlyList<InventoryItem> VisibleItems => _visible;
+    /// <summary>Rows returned by the database for the current criteria.</summary>
+    private IReadOnlyList<InventoryItem> VisibleItems => _items;
 
     /// <summary>Link opening the inventory on one validity chip.</summary>
     /// <param name="due">Chip value, or <c>null</c> for every item.</param>
@@ -102,6 +108,10 @@ public partial class Inventory : ComponentBase
         string.IsNullOrWhiteSpace(search)
             ? RoutePath
             : $"{RoutePath}?q={Uri.EscapeDataString(search.Trim())}";
+
+    /// <summary>Link opening the fiche of a cylinder.</summary>
+    /// <param name="itemId">Identifier of the cylinder item.</param>
+    public static string CylinderHref(long itemId) => $"bouteilles/{itemId}";
 
     /// <inheritdoc />
     protected override async Task OnInitializedAsync()
@@ -118,100 +128,97 @@ public partial class Inventory : ComponentBase
     }
 
     /// <inheritdoc />
-    /// <remarks>
-    /// Only a family change reaches the database: the validity chip and the
-    /// search text narrow the list the page already holds.
-    /// </remarks>
     protected override async Task OnParametersSetAsync()
     {
-        if (_isBusy || !string.Equals(_loadedFamily, Family, StringComparison.Ordinal))
+        if (_isBusy
+            || !string.Equals(_loadedFamily, Family, StringComparison.Ordinal)
+            || !string.Equals(_loadedDue, Due, StringComparison.Ordinal)
+            || !string.Equals(_loadedSearch, Search, StringComparison.Ordinal))
         {
             await ReloadAsync();
-            return;
         }
-
-        RefreshView();
     }
 
     private async Task ReloadAsync()
     {
+        var sequence = ++_loadSequence;
         _isBusy = true;
         _error = null;
         _loadedFamily = Family;
+        _loadedDue = Due;
+        _loadedSearch = Search;
         StateHasChanged();
 
         try
         {
-            var items = await Items.GetItemsAsync(BuildFilter());
+            var listTask = Items.GetItemsAsync(BuildFilter(DueBandFor(Due)));
+            var counts = await Task.WhenAll(
+                CountAsync(null),
+                CountAsync(DueStatus.Overdue),
+                CountAsync(DueStatus.DueSoon),
+                CountAsync(DueStatus.Valid));
+            var items = await listTask;
+
+            if (sequence != _loadSequence)
+            {
+                return;
+            }
+
+            (_countAll, _countOverdue, _countSoon, _countValid) = (counts[0], counts[1], counts[2], counts[3]);
             _items.Clear();
             _items.AddRange(items);
         }
         catch (DataAccessException exception)
         {
-            _error = exception.Message;
+            if (sequence == _loadSequence)
+            {
+                _error = exception.Message;
+                _items.Clear();
+            }
         }
         finally
         {
-            _isBusy = false;
-            RefreshView();
+            if (sequence == _loadSequence)
+            {
+                _isBusy = false;
+            }
         }
     }
 
-    /// <summary>Reapplies the validity chip and the free text to the loaded page.</summary>
-    private void RefreshView() =>
-        _visible = _items.Where(MatchesDueFilter).Where(MatchesSearch).ToArray();
+    private Task<int> CountAsync(DueStatus? band) => Items.CountItemsAsync(BuildFilter(band));
 
-    private InventoryFilter BuildFilter() => new()
+    private InventoryFilter BuildFilter(DueStatus? band) => new()
     {
         FamilyCode = string.IsNullOrWhiteSpace(Family) ? null : Family,
         StatusCode = string.IsNullOrWhiteSpace(_statusCode) ? null : _statusCode,
         ContainerId = long.TryParse(_containerId, out var containerId) ? containerId : null,
         Activation = _activation,
         AmbiguousCodesOnly = _ambiguousCodesOnly,
+        DueBand = band,
+        ReferenceDay = Today,
+        SearchText = Search,
         MaxResults = InventoryFilter.MaxAllowedResults,
     };
 
-    private bool MatchesDueFilter(InventoryItem item) => Due switch
+    /// <summary>Validity band selected by the chip value of the URL, or <c>null</c> for no restriction.</summary>
+    /// <param name="due">Value of the <c>echeance</c> query parameter.</param>
+    private static DueStatus? DueBandFor(string? due) => due switch
     {
-        DueFilterOverdue => item.DueStatusOn(Today) == DueStatus.Overdue,
-        DueFilterSoon => item.DueStatusOn(Today) == DueStatus.DueSoon,
-        DueFilterValid => item.DueStatusOn(Today) == DueStatus.Valid,
-        _ => true,
+        DueFilterOverdue => DueStatus.Overdue,
+        DueFilterSoon => DueStatus.DueSoon,
+        DueFilterValid => DueStatus.Valid,
+        _ => null,
     };
 
-    private bool MatchesSearch(InventoryItem item)
-    {
-        if (string.IsNullOrWhiteSpace(Search))
-        {
-            return true;
-        }
-
-        var needle = Search.Trim();
-
-        return Contains(item.ClubCode, needle)
-            || Contains(item.SerialNumber, needle)
-            || Contains(item.Brand, needle)
-            || Contains(item.Model, needle)
-            || Contains(item.LocationPath, needle);
-    }
-
-    private static bool Contains(string? haystack, string needle) =>
-        haystack is not null && haystack.Contains(needle, StringComparison.OrdinalIgnoreCase);
-
-    /// <summary>Number of loaded items matching one validity chip.</summary>
+    /// <summary>Number of items matching one validity chip, counted by the database.</summary>
     /// <param name="due">Chip value, or <c>null</c> for every item.</param>
-    private int CountFor(string? due)
+    private int CountFor(string? due) => due switch
     {
-        var today = Today;
-
-        return due switch
-        {
-            DueFilterOverdue => _items.Count(item => item.DueStatusOn(today) == DueStatus.Overdue),
-            DueFilterSoon => _items.Count(item => item.DueStatusOn(today) == DueStatus.DueSoon),
-            DueFilterValid => _items.Count(item => item.DueStatusOn(today) == DueStatus.Valid),
-            _ => _items.Count,
-        };
-    }
+        DueFilterOverdue => _countOverdue,
+        DueFilterSoon => _countSoon,
+        DueFilterValid => _countValid,
+        _ => _countAll,
+    };
 
     /// <summary>Rewrites the current URL with one query parameter changed.</summary>
     /// <param name="name">Query parameter name.</param>
