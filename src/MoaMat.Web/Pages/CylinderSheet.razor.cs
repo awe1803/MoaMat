@@ -148,8 +148,19 @@ public partial class CylinderSheet : ComponentBase, IAsyncDisposable
             }
 
             _item = item;
-            _details = await details;
             _events = await events;
+
+            // The "last control" dates come from the timeline, so the header
+            // always agrees with what the timeline shows; the stored value is
+            // only a fallback when the timeline has no dated control.
+            var loadedDetails = await details;
+            _details = loadedDetails is null
+                ? null
+                : loadedDetails with
+                {
+                    LastOpticalControlOn = LatestEventDate(_events, CylinderEventType.OpticalControl) ?? loadedDetails.LastOpticalControlOn,
+                    LastHydraulicControlOn = LatestEventDate(_events, CylinderEventType.HydraulicControl) ?? loadedDetails.LastHydraulicControlOn,
+                };
             _timeline = BuildTimeline(_events, await transitions);
         }
         catch (DataAccessException exception)
@@ -459,6 +470,9 @@ public partial class CylinderSheet : ComponentBase, IAsyncDisposable
             ("Dernier contrôle hydraulique", FormatDate(_details?.LastHydraulicControlOn)),
         ];
     }
+
+    private static DateOnly? LatestEventDate(IReadOnlyList<CylinderEvent> events, CylinderEventType type) =>
+        events.Where(entry => entry.Type == type && entry.OccurredOn is not null).Max(entry => entry.OccurredOn);
 
     private static string Or(string? value) => string.IsNullOrWhiteSpace(value) ? "—" : value;
 
