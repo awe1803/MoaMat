@@ -299,7 +299,7 @@ end $$;
 comment on table  public.item                  is 'Entité de base commune à toutes les familles de matériel (class-table inheritance). Voir db/MODELE.md.';
 comment on column public.item.id               is 'Vraie clé technique : GENERATED ALWAYS AS IDENTITY. Jamais fournie, jamais réutilisée, non modifiable.';
 comment on column public.item.code_club        is 'Identité « club » affichée, distincte de id. Jamais renumérotée automatiquement (Q1.2).';
-comment on column public.item.code_club_ambigu is 'Vrai si code_club est dupliqué ou non structurant. Recalculé, jamais saisi.';
+comment on column public.item.code_club_ambigu is 'Vrai si code_club est dupliqué (un code non structurant n''est pas ambigu). Recalculé, jamais saisi.';
 comment on column public.item.actif            is 'Désactivation logique. La couche métier ne supprime jamais physiquement un item.';
 
 create index if not exists ix_item_famille           on public.item (famille);
@@ -439,13 +439,12 @@ create index if not exists ix_item_reject_origine on public.item_reject (origine
 -- -----------------------------------------------------------------------------
 --  7. Détection des codes club ambigus — on SIGNALE, on ne corrige pas (Q1.2)
 --
---  Un code_club est « ambigu » si :
---     * il apparaît sur plus d'un item (doublon, casse/espaces ignorés), OU
---     * il n'est pas « structurant » : il ne suit pas le motif attendu
---       <1 à 4 lettres><séparateur optionnel><1 à 5 chiffres>
---       (ex. « B123 », « DET-45 », « MD 007 »). Motif volontairement large et
---       AJUSTABLE — voir db/MODELE.md §5. Aucune renumérotation : la valeur
---       d'origine est conservée, seul le drapeau change.
+--  Un code_club est « ambigu » s'il apparaît sur plus d'un item (doublon,
+--  casse/espaces ignorés). Un code non « structurant » (qui ne suit pas le motif
+--  <1 à 4 lettres><séparateur optionnel><1 à 5 chiffres>, ex. « B123 »,
+--  « DET-45 », « MD 007 ») n'est PAS ambigu : il reste seulement signalé par
+--  est_non_structurant. Motif volontairement large et AJUSTABLE — voir
+--  db/MODELE.md §5. Aucune renumérotation : la valeur d'origine est conservée.
 -- -----------------------------------------------------------------------------
 
 create or replace function public.item_code_est_structurant(p_code text)
@@ -486,10 +485,10 @@ security definer
 set search_path = ''
 as $$
     update public.item i
-    set code_club_ambigu = v.est_duplique or v.est_non_structurant
+    set code_club_ambigu = v.est_duplique
     from public.v_code_club_ambigu v
     where v.id = i.id
-      and i.code_club_ambigu is distinct from (v.est_duplique or v.est_non_structurant)
+      and i.code_club_ambigu is distinct from v.est_duplique
 $$;
 
 comment on function public.item_refresh_code_ambigu() is
