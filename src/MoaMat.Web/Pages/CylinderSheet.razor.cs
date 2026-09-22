@@ -4,6 +4,7 @@ using MoaMat.Domain.Campaigns;
 using MoaMat.Domain.Common;
 using MoaMat.Domain.Cylinders;
 using MoaMat.Domain.Inventory;
+using MoaMat.Domain.Locations;
 using MoaMat.Web.Presentation;
 
 namespace MoaMat.Web.Pages;
@@ -57,6 +58,10 @@ public partial class CylinderSheet : ComponentBase, IAsyncDisposable
     private DateOnly? _corHydraulic;
     private string? _corReason;
 
+    private bool _showLocation;
+    private IReadOnlyList<LocationPath> _containerPaths = [];
+    private string _locContainerId = string.Empty;
+
     // Idempotency keys: generated when a form opens and kept across retries of a
     // failed save, renewed only once the save succeeded.
     private Guid _reqRequestId = Guid.NewGuid();
@@ -82,6 +87,9 @@ public partial class CylinderSheet : ComponentBase, IAsyncDisposable
     [Inject]
     private IJSRuntime JS { get; set; } = default!;
 
+    [Inject]
+    private ILocationRepository Locations { get; set; } = default!;
+
     private static DateOnly Today => DateOnly.FromDateTime(DateTime.Now);
 
     /// <inheritdoc />
@@ -90,6 +98,7 @@ public partial class CylinderSheet : ComponentBase, IAsyncDisposable
         _showRequalification = false;
         _showIncident = false;
         _showCorrection = false;
+        _showLocation = false;
         _notice = null;
         await LoadAsync();
     }
@@ -191,6 +200,7 @@ public partial class CylinderSheet : ComponentBase, IAsyncDisposable
         _reqRequestId = Guid.NewGuid();
         _showIncident = false;
         _showCorrection = false;
+        _showLocation = false;
         _error = null;
     }
 
@@ -200,6 +210,7 @@ public partial class CylinderSheet : ComponentBase, IAsyncDisposable
         _incidentRequestId = Guid.NewGuid();
         _showRequalification = false;
         _showCorrection = false;
+        _showLocation = false;
         _error = null;
     }
 
@@ -213,6 +224,7 @@ public partial class CylinderSheet : ComponentBase, IAsyncDisposable
         _error = null;
         _showRequalification = false;
         _showIncident = false;
+        _showLocation = false;
 
         if (_showCorrection)
         {
@@ -294,6 +306,91 @@ public partial class CylinderSheet : ComponentBase, IAsyncDisposable
 
             _notice = "Correction enregistrée et journalisée.";
             _showCorrection = false;
+            await LoadAsync();
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private async Task ToggleLocationAsync()
+    {
+        _error = null;
+        _showRequalification = false;
+        _showIncident = false;
+        _showCorrection = false;
+
+        if (_showLocation)
+        {
+            _showLocation = false;
+            return;
+        }
+
+        try
+        {
+            if (_containerPaths.Count == 0)
+            {
+                _containerPaths = await Locations.GetContainerPathsAsync();
+            }
+        }
+        catch (DataAccessException exception)
+        {
+            _error = exception.Message;
+            return;
+        }
+
+        _locContainerId = _item?.ContainerId?.ToString(AppCulture.French) ?? string.Empty;
+        _showLocation = true;
+    }
+
+    private async Task SaveLocationAsync()
+    {
+        _error = null;
+        _notice = null;
+
+        if (_item is null)
+        {
+            return;
+        }
+
+        var containerId = long.TryParse(_locContainerId, out var parsed) ? parsed : (long?)null;
+        if (containerId == _item.ContainerId)
+        {
+            _showLocation = false;
+            return;
+        }
+
+        var draft = new ItemDraft
+        {
+            Id = _item.Id,
+            ClubCode = _item.ClubCode,
+            FamilyCode = _item.FamilyCode,
+            SerialNumber = _item.SerialNumber,
+            Brand = _item.Brand,
+            Model = _item.Model,
+            AcquiredOn = _item.AcquiredOn,
+            PriceEur = _item.PriceEur,
+            StatusCode = _item.StatusCode,
+            ContainerId = containerId,
+            Destination = _item.Destination,
+            Remark = _item.Remark,
+            DueOn = _item.DueOn,
+            IsActive = _item.IsActive,
+        };
+
+        _isSaving = true;
+        try
+        {
+            var result = await Items.UpdateItemAsync(draft);
+            if (!result.Succeeded)
+            {
+                _error = result.Error;
+                return;
+            }
+
+            _notice = "Localisation mise à jour.";
+            _showLocation = false;
             await LoadAsync();
         }
         finally
@@ -458,6 +555,7 @@ public partial class CylinderSheet : ComponentBase, IAsyncDisposable
 
         return
         [
+            ("Localisation", Or(item.LocationPath)),
             ("Marque", Or(item.Brand)),
             ("Volume", _details?.VolumeLitres is { } volume ? $"{volume:0.##} L" : "—"),
             ("Pression de service", _details?.ServicePressureBar is { } bar ? $"{bar} bar" : "—"),

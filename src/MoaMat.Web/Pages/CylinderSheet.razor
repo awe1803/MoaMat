@@ -3,6 +3,7 @@
 @using MoaMat.Domain.Accounts
 @using MoaMat.Domain.Cylinders
 @using MoaMat.Domain.Inventory
+@using MoaMat.Domain.Locations
 @using MoaMat.Web.Presentation
 
 <PageTitle>@(_item?.ClubCode ?? "Fiche bouteille") — MoaMat</PageTitle>
@@ -80,6 +81,13 @@
                             aria-expanded="@_showIncident">
                         <Icon Name="alert" Size="14" />
                         Signaler un incident
+                    </button>
+                </AuthorizeView>
+                <AuthorizeView Policy="@AuthorizationPolicyNames.ManagerOrHigher" Context="manager">
+                    <button type="button" class="btn" @onclick="ToggleLocationAsync" disabled="@_isSaving"
+                            aria-expanded="@_showLocation">
+                        <Icon Name="edit" Size="14" />
+                        Modifier la localisation
                     </button>
                 </AuthorizeView>
                 <AuthorizeView Policy="@AuthorizationPolicyNames.SuperAdministrator" Context="superAdmin">
@@ -170,6 +178,29 @@
                     <div class="btn-row">
                         <button type="submit" class="btn primary" disabled="@_isSaving">Enregistrer la correction</button>
                         <button type="button" class="btn" @onclick="ToggleCorrectionAsync" disabled="@_isSaving">Annuler</button>
+                    </div>
+                </form>
+            }
+
+            @if (_showLocation)
+            {
+                <form class="fiche-panel" @onsubmit="SaveLocationAsync">
+                    <h2 class="section-title">Modifier la localisation</h2>
+                    <div class="form-grid">
+                        <label class="field">
+                            <span>Lieu</span>
+                            <select @bind="_locContainerId">
+                                <option value="">— aucun —</option>
+                                @foreach (var container in _containerPaths)
+                                {
+                                    <option value="@container.ContainerId">@container.FullPath</option>
+                                }
+                            </select>
+                        </label>
+                    </div>
+                    <div class="btn-row">
+                        <button type="submit" class="btn primary" disabled="@_isSaving">Enregistrer la localisation</button>
+                        <button type="button" class="btn" @onclick="ToggleLocationAsync" disabled="@_isSaving">Annuler</button>
                     </div>
                 </form>
             }
