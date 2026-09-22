@@ -95,4 +95,19 @@
             <Icon Name="more" Size="20" /><span>Plus</span>
         </button>
     </nav>
+
+    @* ---------- "A new version is available" notice ---------- *@
+    @* Not gated on being signed in: a stale bundle is stale for everybody, and
+       unlike the install tip this one only takes the bottom of the screen. *@
+    <AppUpdateToast />
+
+    @* ---------- "Add MoaMat to your home screen" tip ---------- *@
+    @* Signed-in only: the shell also renders while the router redirects an
+       anonymous visitor to the sign-in screen, and a tip flashing there would
+       come before the one thing that screen asks for. *@
+    <AuthorizeView>
+        <Authorized>
+            <PwaInstallDialog />
+        </Authorized>
+    </AuthorizeView>
 </div>

@@ -1,0 +1,81 @@
+/* "New version available" notice. Colours come from the shared tokens only, so
+   it follows the device theme like every other surface, with no rule duplicated
+   per theme. It sits above the mobile tab bar and below the install dialog, so
+   it hides neither the navigation nor a modal. */
+
+.update-toast {
+    position: fixed;
+    right: 16px;
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    left: 16px;
+    z-index: 90;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    max-width: 440px;
+    margin-left: auto;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    box-shadow: var(--shadow-md);
+    animation: update-toast-in .2s ease;
+}
+
+.update-mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius);
+    background: var(--teal-light);
+    color: var(--teal-dark);
+}
+
+.update-text {
+    display: flex;
+    flex: 1 1 160px;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.update-text strong {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+}
+
+.update-text span {
+    font-size: 12.5px;
+    line-height: 1.4;
+    color: var(--ink-3);
+}
+
+.update-actions {
+    display: flex;
+    gap: 8px;
+}
+
+@keyframes update-toast-in {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+}
+
+/* Mobile: clear the bottom tab bar rather than sit on top of it. */
+@media (max-width: 640.98px) {
+    .update-toast {
+        bottom: calc(74px + env(safe-area-inset-bottom, 0px));
+    }
+}
+
+/* Honors the system "reduce motion" setting. */
+@media (prefers-reduced-motion: reduce) {
+    .update-toast {
+        animation: none;
+    }
+}

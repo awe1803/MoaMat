@@ -35,6 +35,9 @@ pushSettings.Validate();
 
 builder.Services.AddSupabaseClient(supabaseSettings);
 builder.Services.AddPushNotifications(pushSettings);
+builder.Services.AddPwaInstallTip();
+builder.Services.AddPwaUpdateNotice();
+builder.Services.AddOfflineGate(supabaseSettings);
 builder.Services.AddMoaMatInfrastructure();
 builder.Services.AddMoaMatAuthorization();
 

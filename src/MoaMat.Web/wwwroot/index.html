@@ -44,6 +44,17 @@
         <a href="." class="reload">Recharger</a>
         <span class="dismiss">🗙</span>
     </div>
+    <script>
+        // Chromium fires `beforeinstallprompt` once, and before Blazor boots:
+        // keep the event so the install tip can still show the browser's own
+        // prompt later, when the user asks for it.
+        window.moamatInstallPrompt = { event: null };
+        window.addEventListener('beforeinstallprompt', event => {
+            event.preventDefault();
+            window.moamatInstallPrompt.event = event;
+        });
+        window.addEventListener('appinstalled', () => { window.moamatInstallPrompt.event = null; });
+    </script>
     <script src="_framework/blazor.webassembly#[.{fingerprint}].js"></script>
     <script>navigator.serviceWorker.register('service-worker.js', { updateViaCache: 'none' });</script>
 </body>

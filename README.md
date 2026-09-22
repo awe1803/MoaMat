@@ -60,6 +60,7 @@ db/item_etat.sql        Machine à états item : transitions, historique décisi
                         verrouillage des statuts terminaux, disponibilité calculée
 db/comptes.sql          Vue + RPC de l'écran /comptes
 db/storage.sql          Buckets Supabase Storage + policies d'accès par rôle
+db/preferences.sql      Préférences d'affichage par compte (invitation à installer la PWA)
 db/item_bouteille.sql   Moteur métier Bouteilles : référentiels réglementaire/
                         tarifaire datés, échéances à deux compteurs, bascule
                         automatique « hors validité »
@@ -72,6 +73,7 @@ db/tests/item_etat_tests.sql      Tests machine à états item (non destructif)
 db/tests/item_bouteille_tests.sql Tests moteur métier Bouteilles (non destructif)
 db/tests/campagne_tests.sql       Tests campagnes de réépreuve (non destructif)
 db/tests/bouteille_evenement_tests.sql Tests chronologie bouteille (non destructif)
+db/tests/preferences_tests.sql    Tests préférences d'affichage (non destructif)
 db/SECURITE.md          Modèle de sécurité + procédure de test
 db/MODELE.md            Modèle Item : stratégie d'héritage + reprise (justifié)
 supabase/functions/     Edge Functions (convention + déploiement CLI)
@@ -116,6 +118,72 @@ la PWA installée).
 > Bootstrap a été retiré : la maquette n'en utilise rien, et ses variables
 > `data-bs-theme` imposaient un second mécanisme de thème en concurrence avec
 > les jetons.
+
+### Invitation à installer l'application (PWA)
+
+À l'ouverture de l'application dans un onglet, une fenêtre d'information
+explique comment ajouter MoaMat à l'écran d'accueil, avec les gestes du
+navigateur détecté (Safari iOS, Android, bureau). Une case **« Ne plus afficher
+ce message »** éteint définitivement l'invitation pour le compte connecté.
+
+| Fichier | Rôle |
+| --- | --- |
+| `src/MoaMat.Web/wwwroot/js/pwa-install.js` | Côté navigateur : état d'installation, plateforme, invite native |
+| `src/MoaMat.Web/Pwa/` | État typé, libellés par plateforme, service d'interop |
+| `src/MoaMat.Web/Components/PwaInstallDialog.razor` | La fenêtre elle-même, posée par `MainLayout` |
+| `db/preferences.sql` | Table `preference_utilisateur` + RPC `definir_invite_installation_masquee()` |
+
+Trois règles tiennent le comportement :
+
+- **Rien n'est affiché à l'application déjà installée** (`display-mode:
+  standalone`), ni à un navigateur qui ne sait pas répondre.
+- **Sur Chromium, l'invite native du navigateur est proposée** plutôt que des
+  instructions : `beforeinstallprompt` est capté dans `index.html` avant le
+  démarrage de Blazor — il n'est émis qu'une fois, et trop tôt pour le code .NET.
+  Partout ailleurs (iOS notamment, qui n'émet jamais cet événement), les étapes
+  manuelles sont listées.
+- **Le choix « ne plus afficher » est stocké en base, sur le compte**
+  (`public.preference_utilisateur`), et non dans le navigateur : « jamais »
+  veut dire jamais, y compris après un vidage des données du site, en
+  navigation privée ou depuis un autre appareil. La case est enregistrée dès
+  qu'elle est cochée — le choix survit donc à un onglet fermé sur la fenêtre —
+  et remise à sa place si la base refuse l'écriture, avec un message : l'écran
+  n'affiche jamais un choix qui n'a pas été retenu. Fermer la fenêtre sans
+  cocher la case la laisse revenir à la prochaine ouverture.
+  La fenêtre n'est proposée qu'à un compte connecté (`MainLayout`), et reste
+  silencieuse si la préférence n'a pas pu être lue.
+
+### Absence de connexion Internet
+
+Installé, MoaMat démarre depuis le cache du *service worker* : sans réseau, la
+coquille s'affiche parfaitement et chaque écran reste vide, sans que rien dise
+pourquoi. Une page d'erreur plein écran couvre donc l'application dès que le
+serveur n'est plus joignable, explique la situation et demande de rétablir une
+connexion.
+
+| Fichier | Rôle |
+| --- | --- |
+| `src/MoaMat.Web/wwwroot/js/connectivity.js` | Côté navigateur : événements `online`/`offline` + sonde réseau |
+| `src/MoaMat.Web/Connectivity/ConnectivityService.cs` | Service d'interop : surveillance et vérification à la demande |
+| `src/MoaMat.Web/Components/OfflineGate.razor` | La page elle-même, posée par `App.razor` (donc valable pour tous les layouts) |
+
+Trois règles tiennent le comportement :
+
+- **`navigator.onLine` n'est qu'un indice.** Il ne dit vrai que lorsqu'il
+  répond « hors ligne » : un appareil derrière un portail Wi-Fi captif se
+  déclare en ligne. Tout retour de connexion est donc confirmé par une requête
+  réelle, envoyée en `no-cors` — la réponse opaque suffit à savoir qu'elle a
+  abouti, et n'exige rien de la configuration CORS du serveur.
+- **La sonde vise le projet Supabase**, pas un fichier de l'application : une
+  requête de même origine est servie par le cache du *service worker* et
+  réussirait réseau débranché. Ce qui doit être joignable, c'est le serveur
+  dont l'application a besoin.
+- **Rien n'est rechargé au retour du réseau.** L'application n'a jamais été
+  arrêtée, seulement recouverte : un formulaire à moitié saisi est toujours là
+  dessous. La page s'efface, sans plus. Le bouton « Réessayer » force une
+  vérification ; tant que la connexion manque, une vérification automatique a
+  lieu toutes les 15 secondes (et au retour de l'onglet au premier plan), car
+  un portail captif validé ailleurs n'émet aucun événement ici.
 
 ## Démarrage — application
 
@@ -296,6 +364,10 @@ Dans l'éditeur SQL Supabase (ou via `psql`), exécuter **dans l'ordre** :
 13. [`db/campagne.sql`](db/campagne.sql) — campagnes de réépreuve
     (préparation → envoi → retour), écritures exclusivement via RPC
     `SECURITY DEFINER`. Détail : [`db/MODELE.md`](db/MODELE.md) §11.
+14. [`db/preferences.sql`](db/preferences.sql) — préférences d'affichage par
+    compte : `public.preference_utilisateur` (lecture limitée à sa propre
+    ligne, écriture via `public.definir_invite_installation_masquee`). Porte
+    aujourd'hui le « ne plus afficher » de l'invitation à installer la PWA.
 
 Tous ces scripts sont ré-exécutables. Ensuite : activer le hook
 *Custom Access Token* (Dashboard → Authentication → Hooks →
@@ -310,6 +382,7 @@ psql "$SUPABASE_DB_URL" -f db/tests/rls_tests.sql
 psql "$SUPABASE_DB_URL" -f db/tests/item_etat_tests.sql
 psql "$SUPABASE_DB_URL" -f db/tests/item_bouteille_tests.sql
 psql "$SUPABASE_DB_URL" -f db/tests/campagne_tests.sql
+psql "$SUPABASE_DB_URL" -f db/tests/preferences_tests.sql
 ```
 
 Modèle de sécurité complet : [`db/SECURITE.md`](db/SECURITE.md).
@@ -399,6 +472,11 @@ Le découpage décrit plus haut (voir [Architecture](#architecture)) est
 - **Inventaire** (`/inventaire`) — liste filtrée (famille, statut, lieu,
   échéance, état) avec badge « code ambigu », désactivation logique.
 - **Lieux** (`/lieux`, admin+) — CRUD de la hiérarchie Section → Local → Contenant.
+- **Invitation à installer la PWA** — fenêtre d'information à l'ouverture, avec
+  les gestes du navigateur détecté et une case « ne plus afficher ».
+- **Page « pas d'accès à Internet »** — l'application est couverte tant que le
+  serveur n'est pas joignable, avec bouton « Réessayer » et retour automatique
+  dès que la connexion revient.
 
 Rappel : la couche d'accès aux données **n'est pas** la ligne de sécurité — elle
 est portée par les policies RLS (`db/rls.sql`). Le reste de l'UI métier (fiches

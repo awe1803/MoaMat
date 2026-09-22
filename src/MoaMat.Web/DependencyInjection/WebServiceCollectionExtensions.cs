@@ -7,8 +7,10 @@ using MoaMat.Domain.Accounts;
 using MoaMat.Domain.Navigation;
 using MoaMat.Infrastructure.Supabase;
 using MoaMat.Web.Authentication;
+using MoaMat.Web.Connectivity;
 using MoaMat.Web.Navigation;
 using MoaMat.Web.Notifications;
+using MoaMat.Web.Pwa;
 using Supabase.Gotrue;
 using Supabase.Gotrue.Interfaces;
 
@@ -68,6 +70,60 @@ internal static class WebServiceCollectionExtensions
 
         services.AddSingleton(settings);
         services.AddScoped<PushNotificationService>();
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers the "install MoaMat on this device" tip. It needs no
+    /// configuration of its own: the browser answers what it can do, and the
+    /// stored choice comes from the infrastructure preference store.
+    /// </summary>
+    /// <param name="services">Container being configured.</param>
+    /// <returns>The same collection, for chaining.</returns>
+    public static IServiceCollection AddPwaInstallTip(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.AddScoped<PwaInstallService>();
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers the "a new version is available" notice. It needs no
+    /// configuration of its own: the service worker registered by
+    /// <c>index.html</c> is what it watches.
+    /// </summary>
+    /// <param name="services">Container being configured.</param>
+    /// <returns>The same collection, for chaining.</returns>
+    public static IServiceCollection AddPwaUpdateNotice(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.AddScoped<PwaUpdateService>();
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers the "no internet access" page. It probes the Supabase project
+    /// rather than an address of our own: reaching the server the application
+    /// actually needs is the only answer worth showing the user.
+    /// </summary>
+    /// <param name="services">Container being configured.</param>
+    /// <param name="settings">Validated Supabase settings.</param>
+    /// <returns>The same collection, for chaining.</returns>
+    public static IServiceCollection AddOfflineGate(
+        this IServiceCollection services,
+        SupabaseSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(settings);
+
+        services.AddScoped(provider => new ConnectivityService(
+            provider.GetRequiredService<IJSRuntime>(),
+            settings.Url));
 
         return services;
     }

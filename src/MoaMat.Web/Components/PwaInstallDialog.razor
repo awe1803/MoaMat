@@ -1,0 +1,65 @@
+@using MoaMat.Web.Pwa
+
+@if (_isOpen)
+{
+    <div class="pwa-backdrop" @onclick="Close">
+        <div class="pwa-card" role="dialog" aria-modal="true" aria-labelledby="pwa-install-title"
+             @onclick:stopPropagation>
+
+            <div class="pwa-head">
+                <span class="pwa-mark"><Icon Name="download" Size="18" /></span>
+                <h2 id="pwa-install-title">Installer MoaMat sur cet appareil</h2>
+                <button type="button" class="icon-btn" @onclick="Close" title="Fermer">
+                    <Icon Name="close" Size="16" />
+                </button>
+            </div>
+
+            <p class="pwa-lead">
+                Ajoutez MoaMat à votre écran d'accueil : l'application s'ouvre en plein écran,
+                démarre plus vite et reste à portée d'un geste, comme une application installée.
+            </p>
+
+            @if (_canPrompt)
+            {
+                <p class="pwa-lead">
+                    Votre navigateur sait le faire tout seul : touchez « Installer », puis confirmez.
+                </p>
+            }
+            else
+            {
+                <ol class="pwa-steps">
+                    @foreach (var step in _steps)
+                    {
+                        <li>@step</li>
+                    }
+                </ol>
+            }
+
+            @if (_error is not null)
+            {
+                <p class="pwa-error" role="alert">@_error</p>
+            }
+
+            <div class="pwa-foot">
+                <label class="pwa-never">
+                    <input type="checkbox" checked="@_neverAgain" disabled="@_isBusy"
+                           @onchange="OnNeverAgainChanged" />
+                    Ne plus afficher ce message
+                </label>
+
+                <div class="btn-row">
+                    @if (_canPrompt)
+                    {
+                        <button type="button" class="btn primary" @onclick="InstallAsync" disabled="@_isBusy">
+                            <Icon Name="download" Size="14" />
+                            Installer
+                        </button>
+                    }
+                    <button type="button" class="btn" @onclick="Close">
+                        @(_canPrompt ? "Plus tard" : "Compris")
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
