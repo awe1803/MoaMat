@@ -152,14 +152,19 @@ public partial class CylinderSheet : ComponentBase, IAsyncDisposable
 
             // The "last control" dates come from the timeline, so the header
             // always agrees with what the timeline shows; the stored value is
-            // only a fallback when the timeline has no dated control.
+            // only a fallback when the timeline has no dated control. A
+            // hydraulic control implies a visual/optical check of the
+            // cylinder, so it also counts as an optical control when it is
+            // the most recent one (mirrors db/aligner_controle_optique_sur_hydraulique.sql).
             var loadedDetails = await details;
+            var lastOpticalEventOn = LatestEventDate(_events, CylinderEventType.OpticalControl);
+            var lastHydraulicEventOn = LatestEventDate(_events, CylinderEventType.HydraulicControl);
             _details = loadedDetails is null
                 ? null
                 : loadedDetails with
                 {
-                    LastOpticalControlOn = LatestEventDate(_events, CylinderEventType.OpticalControl) ?? loadedDetails.LastOpticalControlOn,
-                    LastHydraulicControlOn = LatestEventDate(_events, CylinderEventType.HydraulicControl) ?? loadedDetails.LastHydraulicControlOn,
+                    LastOpticalControlOn = Max(lastOpticalEventOn, lastHydraulicEventOn) ?? loadedDetails.LastOpticalControlOn,
+                    LastHydraulicControlOn = lastHydraulicEventOn ?? loadedDetails.LastHydraulicControlOn,
                 };
             _timeline = BuildTimeline(_events, await transitions);
         }
@@ -473,6 +478,15 @@ public partial class CylinderSheet : ComponentBase, IAsyncDisposable
 
     private static DateOnly? LatestEventDate(IReadOnlyList<CylinderEvent> events, CylinderEventType type) =>
         events.Where(entry => entry.Type == type && entry.OccurredOn is not null).Max(entry => entry.OccurredOn);
+
+    private static DateOnly? Max(DateOnly? first, DateOnly? second) =>
+        (first, second) switch
+        {
+            (null, null) => null,
+            (null, { } value) => value,
+            ({ } value, null) => value,
+            ({ } a, { } b) => a > b ? a : b,
+        };
 
     private static string Or(string? value) => string.IsNullOrWhiteSpace(value) ? "—" : value;
 
