@@ -1,0 +1,38 @@
+@using MoaMat.Web.Connectivity
+
+@if (_isOffline)
+{
+    <div class="offline-gate" role="alertdialog" aria-modal="true" aria-labelledby="offline-title">
+        <div class="offline-card">
+            <span class="offline-mark"><Icon Name="wifi-off" Size="26" /></span>
+
+            <h1 id="offline-title">Pas d'accès à Internet</h1>
+
+            <p class="offline-lead">
+                MoaMat ne peut pas joindre le serveur du club. Le matériel, les prêts et les
+                échéances y sont conservés : sans connexion, rien ne peut être consulté ni
+                enregistré.
+            </p>
+
+            <p class="offline-ask">Rétablissez une connexion Internet, puis réessayez.</p>
+
+            <ul class="offline-steps">
+                <li>Vérifiez le Wi-Fi ou les données mobiles de l'appareil.</li>
+                <li>Désactivez le mode avion s'il est activé.</li>
+                <li>Sur un réseau public, ouvrez sa page de connexion avant de revenir ici.</li>
+            </ul>
+
+            <button type="button" class="btn primary" @onclick="RetryAsync" disabled="@_isChecking">
+                <Icon Name="refresh" Size="14" />
+                @(_isChecking ? "Vérification…" : "Réessayer")
+            </button>
+
+            @if (_hasRetryFailed)
+            {
+                <p class="offline-hint" role="status">
+                    Toujours aucune connexion. MoaMat revient tout seul dès que l'accès est rétabli.
+                </p>
+            }
+        </div>
+    </div>
+}

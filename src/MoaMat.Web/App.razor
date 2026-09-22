@@ -15,3 +15,11 @@
         <FocusOnNavigate RouteData="@routeData" Selector="h1" />
     </Found>
 </Router>
+
+@* ---------- "No internet access" page ---------- *@
+@* Outside the router, and after it, on purpose: every layout needs it - signing
+   in reaches the network just as much as the inventory does - and a route that
+   never resolves offline must not take the explanation down with it. Coming
+   after the router also leaves the routed page's own <h1> first in the
+   document, where FocusOnNavigate looks for it. *@
+<OfflineGate />

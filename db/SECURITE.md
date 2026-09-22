@@ -19,8 +19,10 @@ Dans l'éditeur SQL Supabase (ou `psql`), **dans cet ordre** :
 | 7 | `db/comptes.sql` | vue `compte_utilisateur` (liste des comptes) + `set_compte_actif()` (désactivation, réversible) + `supprimer_compte()` (suppression définitive, super-admin uniquement) |
 | 8 | `db/notifications.sql` | notifications push « nouveau compte en attente » : table `abonnement_push`, RPC d'abonnement réservées à `role.assign`, destinataires, trigger `pg_net` vers l'Edge Function `notify-pending-account` |
 | 9 | `db/storage.sql` | buckets + policies Storage (réutilise les fonctions de `roles.sql`) |
+| 10 | `db/preferences.sql` | préférences d'affichage par compte : table `preference_utilisateur` (lecture limitée à sa propre ligne), RPC `definir_invite_installation_masquee()` — aucune permission exigée, chacun n'écrit que pour lui-même |
 
-Tests : `db/tests/rls_tests.sql` et `db/tests/notifications_tests.sql` (non destructifs, `begin … rollback`).
+Tests : `db/tests/rls_tests.sql`, `db/tests/notifications_tests.sql` et
+`db/tests/preferences_tests.sql` (non destructifs, `begin … rollback`).
 
 ## 2. Les 5 rôles
 
