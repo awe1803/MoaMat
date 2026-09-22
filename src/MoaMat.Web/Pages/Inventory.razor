@@ -70,6 +70,10 @@
                     @onclick="@(() => Go("echeance", DueFilterValid))">
                 Valides (@CountFor(DueFilterValid))
             </button>
+            <button type="button" class="chip @(Due == DueFilterNone ? "active" : null)"
+                    @onclick="@(() => Go("echeance", DueFilterNone))">
+                Sans échéance (@CountFor(DueFilterNone))
+            </button>
         </div>
 
         @if (Family is null)
