@@ -33,6 +33,9 @@ public partial class Inventory : ComponentBase
     /// <summary>Chip value listing the items still comfortably valid.</summary>
     public const string DueFilterValid = "valide";
 
+    /// <summary>Chip value listing the items with no due date recorded.</summary>
+    public const string DueFilterNone = "aucune";
+
     private const string RoutePath = "inventaire";
 
     private readonly List<InventoryItem> _items = [];
@@ -58,6 +61,7 @@ public partial class Inventory : ComponentBase
     private int _countOverdue;
     private int _countSoon;
     private int _countValid;
+    private int _countNone;
 
     // Guards against an older, slower response overwriting a newer one when
     // the user changes the filter faster than the network answers.
@@ -156,7 +160,8 @@ public partial class Inventory : ComponentBase
                 CountAsync(null),
                 CountAsync(DueStatus.Overdue),
                 CountAsync(DueStatus.DueSoon),
-                CountAsync(DueStatus.Valid));
+                CountAsync(DueStatus.Valid),
+                CountAsync(DueStatus.Unknown));
             var items = await listTask;
 
             if (sequence != _loadSequence)
@@ -164,7 +169,8 @@ public partial class Inventory : ComponentBase
                 return;
             }
 
-            (_countAll, _countOverdue, _countSoon, _countValid) = (counts[0], counts[1], counts[2], counts[3]);
+            (_countAll, _countOverdue, _countSoon, _countValid, _countNone) =
+                (counts[0], counts[1], counts[2], counts[3], counts[4]);
             _items.Clear();
             _items.AddRange(items);
         }
@@ -207,6 +213,7 @@ public partial class Inventory : ComponentBase
         DueFilterOverdue => DueStatus.Overdue,
         DueFilterSoon => DueStatus.DueSoon,
         DueFilterValid => DueStatus.Valid,
+        DueFilterNone => DueStatus.Unknown,
         _ => null,
     };
 
@@ -217,6 +224,7 @@ public partial class Inventory : ComponentBase
         DueFilterOverdue => _countOverdue,
         DueFilterSoon => _countSoon,
         DueFilterValid => _countValid,
+        DueFilterNone => _countNone,
         _ => _countAll,
     };
 

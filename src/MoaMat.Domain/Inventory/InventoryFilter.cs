@@ -34,8 +34,8 @@ public sealed record InventoryFilter
     /// <summary>
     /// Keep only items in one validity band (<see cref="DueStatus.Overdue"/>,
     /// <see cref="DueStatus.DueSoon"/> or <see cref="DueStatus.Valid"/>) as of
-    /// <see cref="ReferenceDay"/>. Items without a due date match no band.
-    /// <c>null</c> (or <see cref="DueStatus.Unknown"/>) applies no restriction.
+    /// <see cref="ReferenceDay"/>. <see cref="DueStatus.Unknown"/> keeps only
+    /// items with no due date recorded at all. <c>null</c> applies no restriction.
     /// </summary>
     public DueStatus? DueBand { get; init; }
 

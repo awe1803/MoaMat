@@ -36,6 +36,8 @@ internal sealed class SupabaseInventoryRepository : IInventoryRepository
 
     private const string FalseLiteral = "false";
 
+    private const string NullLiteral = "null";
+
     /// <summary>Characters stripped from free-text search: see <see cref="SanitizeSearchTerm"/>.</summary>
     private const string SearchReservedCharacters = """,()*%"\&#+""";
 
@@ -154,6 +156,8 @@ internal sealed class SupabaseInventoryRepository : IInventoryRepository
                     .Filter("date_echeance", Constants.Operator.LessThanOrEqual, horizon);
             case DueStatus.Valid:
                 return query.Filter("date_echeance", Constants.Operator.GreaterThan, horizon);
+            case DueStatus.Unknown:
+                return query.Filter("date_echeance", Constants.Operator.Is, NullLiteral);
             default:
                 return query;
         }
