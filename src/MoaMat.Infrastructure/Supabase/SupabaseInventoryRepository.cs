@@ -66,9 +66,7 @@ internal sealed class SupabaseInventoryRepository : IInventoryRepository
             ReadFailureMessage,
             async () =>
             {
-                var query = ApplyFilter(_client.From<ItemViewRecord>(), filter)
-                    .Order("code_club", Constants.Ordering.Ascending)
-                    .Order("id", Constants.Ordering.Ascending)
+                var query = ApplyOrder(ApplyFilter(_client.From<ItemViewRecord>(), filter), filter)
                     .Limit(filter.MaxResults);
 
                 var response = await query.Get(cancellationToken).ConfigureAwait(false);
@@ -135,6 +133,22 @@ internal sealed class SupabaseInventoryRepository : IInventoryRepository
 
         return ApplySearch(query, filter.SearchText);
     }
+
+    /// <summary>
+    /// Orders the result list. On the cylinder screen, items are sorted by
+    /// nearest due date first so the crew sees what needs attention soonest;
+    /// every other screen keeps the club-code order.
+    /// </summary>
+    /// <param name="query">Query on <c>public.v_item</c>, already filtered.</param>
+    /// <param name="filter">Criteria the query was built from.</param>
+    private static IPostgrestTable<ItemViewRecord> ApplyOrder(IPostgrestTable<ItemViewRecord> query, InventoryFilter filter) =>
+        string.Equals(filter.FamilyCode, ItemFamily.Cylinder.Code, StringComparison.Ordinal)
+            ? query
+                .Order("date_echeance", Constants.Ordering.Ascending, Constants.NullPosition.Last)
+                .Order("id", Constants.Ordering.Ascending)
+            : query
+                .Order("code_club", Constants.Ordering.Ascending)
+                .Order("id", Constants.Ordering.Ascending);
 
     /// <summary>
     /// Validity band as a window on <c>date_echeance</c>; the boundaries are the
