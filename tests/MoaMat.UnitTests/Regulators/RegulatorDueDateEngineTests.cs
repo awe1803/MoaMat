@@ -6,8 +6,9 @@ namespace MoaMat.UnitTests.Regulators;
 /// <see cref="RegulatorDueDateEngine"/> is the pure C# mirror of
 /// <c>public.detendeur_echeance()</c> (<c>db/item_detendeur.sql</c>): a single
 /// counter, periodicity administrable per (brand, model) via
-/// <c>public.ref_periodicite_detendeur</c> — no fixed interval, and never a
-/// guessed default when the profile has not been configured yet.
+/// <c>public.ref_periodicite_detendeur</c>, falling back to
+/// <see cref="RegulatorDueDateEngine.DefaultPeriodicityInMonths"/> until that
+/// profile has been configured.
 /// </summary>
 public sealed class RegulatorDueDateEngineTests
 {
@@ -37,11 +38,11 @@ public sealed class RegulatorDueDateEngineTests
     }
 
     [Fact]
-    public void ComputeDueDate_is_null_when_no_rule_covers_this_profile()
+    public void ComputeDueDate_falls_back_to_the_default_periodicity_when_no_rule_covers_this_profile()
     {
         var due = RegulatorDueDateEngine.ComputeDueDate("Mares", "Abyss", LastIntervention, Rules);
 
-        Assert.Null(due);
+        Assert.Equal(LastIntervention.AddMonths(RegulatorDueDateEngine.DefaultPeriodicityInMonths), due);
     }
 
     [Theory]
