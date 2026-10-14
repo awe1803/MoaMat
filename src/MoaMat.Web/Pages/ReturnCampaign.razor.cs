@@ -27,6 +27,7 @@ public partial class ReturnCampaign : ComponentBase
     private bool _isSubmitting;
     private string? _error;
     private DateOnly _returnedOn = DateOnly.FromDateTime(DateTime.Today);
+    private string _bordereauNumberInput = string.Empty;
 
     [Parameter]
     [SupplyParameterFromQuery(Name = "id")]
@@ -64,6 +65,7 @@ public partial class ReturnCampaign : ComponentBase
                 _certificateNumbers.Clear();
                 _actualCosts.Clear();
                 _outcomes.Clear();
+                _bordereauNumberInput = string.Empty;
 
                 if (_campaign is not null)
                 {
@@ -182,6 +184,37 @@ public partial class ReturnCampaign : ComponentBase
             // ReloadAsync() clears _error as its first step, so the write's
             // refusal (if any) must be applied AFTER the reload, not before,
             // or it is wiped before the next render ever shows it.
+            await ReloadAsync();
+
+            if (!result.Succeeded)
+            {
+                _error = result.Error;
+            }
+        }
+        finally
+        {
+            _isSubmitting = false;
+        }
+    }
+
+    private async Task SetBordereauNumberAsync()
+    {
+        // Same double-click guard as everywhere else on this screen: a
+        // second concurrent click would either be a harmless identical
+        // write, or fail because the first one already set a value —
+        // either way confusing for a single click.
+        if (_isSubmitting || _campaign is not { } campaign || string.IsNullOrWhiteSpace(_bordereauNumberInput))
+        {
+            return;
+        }
+
+        _isSubmitting = true;
+
+        try
+        {
+            var result = await Campaigns.SetBordereauNumberAsync(campaign.Id, _bordereauNumberInput);
+
+            // ReloadAsync() clears _error first, so a refusal is applied after it.
             await ReloadAsync();
 
             if (!result.Succeeded)

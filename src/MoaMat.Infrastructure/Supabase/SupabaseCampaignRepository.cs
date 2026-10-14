@@ -39,7 +39,10 @@ internal sealed class SupabaseCampaignRepository : ICampaignRepository
         "Modification refusée (droits insuffisants ou campagne dans un état incompatible).";
 
     private const string SendRefusedMessage =
-        "Envoi refusé (droits insuffisants, bordereau invalide ou prestation manquante sur une ligne).";
+        "Envoi refusé (droits insuffisants ou prestation manquante sur une ligne).";
+
+    private const string BordereauRefusedMessage =
+        "Modification du numéro de bon refusée (droits insuffisants, campagne pas encore envoyée ou numéro vide).";
 
     private const string ReturnRefusedMessage =
         "Enregistrement du retour refusé (droits insuffisants ou campagne non envoyée).";
@@ -254,24 +257,41 @@ internal sealed class SupabaseCampaignRepository : ICampaignRepository
     /// <inheritdoc />
     public Task<OperationResult> SendCampaignAsync(
         long campaignId,
-        string bordereauNumber,
+        string? bordereauNumber,
         DateOnly sentOn,
+        CancellationToken cancellationToken = default) =>
+        _guard.WriteAsync(
+            nameof(SendCampaignAsync),
+            SendRefusedMessage,
+            () => _client.Rpc("envoyer_campagne", new Dictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["p_campagne_id"] = campaignId,
+                ["p_numero_bon"] = string.IsNullOrWhiteSpace(bordereauNumber) ? null : bordereauNumber,
+                ["p_date_envoi"] = ToDateString(sentOn),
+            }),
+            cancellationToken);
+
+    /// <inheritdoc />
+    public Task<OperationResult> SetBordereauNumberAsync(
+        long campaignId,
+        string bordereauNumber,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(bordereauNumber))
         {
-            return Task.FromResult(OperationResult.Failure("Numéro de bon manquant : envoi refusé."));
+            return Task.FromResult(OperationResult.Failure("Numéro de bon manquant."));
         }
 
         return _guard.WriteAsync(
-            nameof(SendCampaignAsync),
-            SendRefusedMessage,
-            () => _client.Rpc("envoyer_campagne", new Dictionary<string, object>(StringComparer.Ordinal)
-            {
-                ["p_campagne_id"] = campaignId,
-                ["p_numero_bon"] = bordereauNumber,
-                ["p_date_envoi"] = ToDateString(sentOn),
-            }),
+            nameof(SetBordereauNumberAsync),
+            BordereauRefusedMessage,
+            () => _client.Rpc(
+                "definir_numero_bon_campagne",
+                new Dictionary<string, object>(StringComparer.Ordinal)
+                {
+                    ["p_campagne_id"] = campaignId,
+                    ["p_numero_bon"] = bordereauNumber,
+                }),
             cancellationToken);
     }
 

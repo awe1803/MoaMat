@@ -103,9 +103,23 @@
         {
             <div class="page-head">
                 <div class="sub">
-                    Campagne #@_campaign.Id — @_campaign.Provider — bordereau @_campaign.BordereauNumber
+                    Campagne #@_campaign.Id — @_campaign.Provider — bordereau @(_campaign.BordereauNumber ?? "—")
                 </div>
             </div>
+
+            @if (_campaign.BordereauNumber is null)
+            {
+                <div class="toolbar">
+                    <label>
+                        N° de bon
+                        <input type="text" @bind="_bordereauNumberInput" />
+                    </label>
+                    <button type="button" class="btn" @onclick="SetBordereauNumberAsync"
+                            disabled="@(string.IsNullOrWhiteSpace(_bordereauNumberInput) || _isSubmitting)">
+                        Enregistrer le numéro de bon
+                    </button>
+                </div>
+            }
 
             <div class="table-scroll">
                 <table class="data-table">

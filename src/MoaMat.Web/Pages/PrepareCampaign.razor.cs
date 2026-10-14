@@ -222,7 +222,8 @@ public partial class PrepareCampaign : ComponentBase
 
         try
         {
-            var result = await Campaigns.SendCampaignAsync(campaign.Id, _bordereauNumber, _sentOn);
+            var bordereauNumber = string.IsNullOrWhiteSpace(_bordereauNumber) ? null : _bordereauNumber;
+            var result = await Campaigns.SendCampaignAsync(campaign.Id, bordereauNumber, _sentOn);
             await ReloadAsync();
 
             if (!result.Succeeded)

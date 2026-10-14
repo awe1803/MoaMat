@@ -200,18 +200,22 @@
             {
                 <div class="toolbar">
                     <label>
-                        N° de bon
+                        N° de bon (facultatif)
                         <input type="text" @bind="_bordereauNumber" />
                     </label>
                     <label>
                         Date d'envoi
                         <input type="date" @bind="_sentOn" />
                     </label>
-                    <button type="button" class="btn" @onclick="SendCampaignAsync"
-                            disabled="@(string.IsNullOrWhiteSpace(_bordereauNumber) || _isSubmitting)">
+                    <button type="button" class="btn" @onclick="SendCampaignAsync" disabled="@_isSubmitting">
                         Générer le bordereau et envoyer
                     </button>
                 </div>
+                <p class="msg-muted">
+                    Le numéro de bon peut être laissé vide si le prestataire ne le communique
+                    qu'à la remise physique des bouteilles — il pourra être ajouté ensuite depuis
+                    l'écran de retour de campagne.
+                </p>
             }
         }
     </Authorized>
