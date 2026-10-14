@@ -53,6 +53,8 @@ db/roles.sql            Table utilisateur_role + trigger + fonctions de rôle
 db/permissions.sql      Catalogue de permissions nommées + matrice par rôle
 db/model_item.sql       Modèle métier « Item » : entité de base + spécialisations,
                         hiérarchie de lieux, statuts, détection des codes ambigus
+db/ref_marque.sql       Table de correspondance « marque » (constat A22) + résolveur,
+                        utilisé par la reprise
 db/transform_item.sql   Reprise « miroir Access -> modèle Item » (rejouable)
 db/rls.sql              Policies RLS explicites sur toutes les tables
 db/audit.sql            Journal d'audit append-only + triggers
@@ -68,11 +70,16 @@ db/campagne.sql         Campagnes de réépreuve : préparation, bordereau,
                         retour groupé, bouteilles manquantes/condamnées
 db/bouteille_evenement.sql Chronologie bouteille : reprise des 412 réépreuves (ID interne),
                         requalification, signalement d'incident
+db/item_detendeur.sql   Moteur métier Détendeurs : référentiel de périodicité par
+                        marque/modèle, échéance d'entretien
+db/detendeur_evenement.sql Chronologie détendeur : reprise des 115 interventions,
+                        saisie bloquante des 5 points de contrôle obligatoires
 db/tests/rls_tests.sql  Tests de sécurité RLS / rôles / audit (non destructif)
 db/tests/item_etat_tests.sql      Tests machine à états item (non destructif)
 db/tests/item_bouteille_tests.sql Tests moteur métier Bouteilles (non destructif)
 db/tests/campagne_tests.sql       Tests campagnes de réépreuve (non destructif)
 db/tests/bouteille_evenement_tests.sql Tests chronologie bouteille (non destructif)
+db/tests/detendeur_evenement_tests.sql Tests chronologie détendeur (non destructif)
 db/tests/preferences_tests.sql    Tests préférences d'affichage (non destructif)
 db/SECURITE.md          Modèle de sécurité + procédure de test
 db/MODELE.md            Modèle Item : stratégie d'héritage + reprise (justifié)
@@ -338,33 +345,49 @@ Dans l'éditeur SQL Supabase (ou via `psql`), exécuter **dans l'ordre** :
    base `public.item` + spécialisations `item_*`, hiérarchie de lieux
    Section→Local→Contenant, catalogue `ref_statut`, détection des codes club
    ambigus. RLS **activée sans policy**. Ne charge aucune donnée.
-6. [`db/transform_item.sql`](db/transform_item.sql) — reprise **miroir Access →
+6. [`db/ref_marque.sql`](db/ref_marque.sql) — table de correspondance
+   `ref_marque_normalisation` (constat A22 : incohérences de casse) et
+   résolveur `public.moamat_normalise_marque()`, utilisé par la reprise
+   ci-dessous.
+7. [`db/transform_item.sql`](db/transform_item.sql) — reprise **miroir Access →
    modèle Item** : typage fin (constats A11/A22), journal des rejets
-   `item_reject`, drapeau `code_club_ambigu`. Ré-exécutable
+   `item_reject`, drapeau `code_club_ambigu`, normalisation des marques,
+   fusion déclassé/actif par n° de série pour les détendeurs. Ré-exécutable
    (`truncate ... restart identity cascade` sur `item*`). Détail et stratégie
    d'héritage : [`db/MODELE.md`](db/MODELE.md).
-7. [`db/rls.sql`](db/rls.sql) — policies RLS explicites sur **toutes** les
+8. [`db/rls.sql`](db/rls.sql) — policies RLS explicites sur **toutes** les
    tables (miroir + modèle Item) ; supprime la policy permissive `moamat_dev_all`.
-8. [`db/audit.sql`](db/audit.sql) — journal `public.audit_log` append-only et
+9. [`db/audit.sql`](db/audit.sql) — journal `public.audit_log` append-only et
    triggers sur les tables sensibles (dont `item.statut_code` terminal).
-9. [`db/item_etat.sql`](db/item_etat.sql) — machine à états de l'item :
-   historique décisionnaire `public.item_transition` (append-only), trigger de
-   validation des transitions (motif/date obligatoires, pièce jointe
-   Perte/Vol, irréversibilité des statuts terminaux, autorité décisionnaire),
-   verrouillage RLS symétrique de `item_upd`.
-10. [`db/comptes.sql`](db/comptes.sql) — vue `public.compte_utilisateur` et RPC
+10. [`db/item_etat.sql`](db/item_etat.sql) — machine à états de l'item :
+    historique décisionnaire `public.item_transition` (append-only), trigger de
+    validation des transitions (motif/date obligatoires, pièce jointe
+    Perte/Vol, irréversibilité des statuts terminaux, autorité décisionnaire),
+    verrouillage RLS symétrique de `item_upd`.
+11. [`db/comptes.sql`](db/comptes.sql) — vue `public.compte_utilisateur` et RPC
     `public.set_compte_actif` de l'écran /comptes.
-11. [`db/storage.sql`](db/storage.sql) — buckets Supabase Storage
+12. [`db/storage.sql`](db/storage.sql) — buckets Supabase Storage
     (`materiel-photos`, `certificats-requalification`, `factures`, tous privés)
     et policies d'accès par rôle sur `storage.objects`. Ré-exécutable.
-12. [`db/item_bouteille.sql`](db/item_bouteille.sql) — moteur métier
+13. [`db/item_bouteille.sql`](db/item_bouteille.sql) — moteur métier
     Bouteilles : référentiels réglementaire/tarifaire datés (append-only),
     échéances à deux compteurs (optique/hydraulique), bascule automatique
     « hors validité ». Détail : [`db/MODELE.md`](db/MODELE.md) §10.
-13. [`db/campagne.sql`](db/campagne.sql) — campagnes de réépreuve
+14. [`db/campagne.sql`](db/campagne.sql) — campagnes de réépreuve
     (préparation → envoi → retour), écritures exclusivement via RPC
     `SECURITY DEFINER`. Détail : [`db/MODELE.md`](db/MODELE.md) §11.
-14. [`db/preferences.sql`](db/preferences.sql) — préférences d'affichage par
+15. [`db/bouteille_evenement.sql`](db/bouteille_evenement.sql) — chronologie
+    bouteille : reprise des 412 réépreuves (ID interne), requalification et
+    signalement d'incident saisis depuis la fiche bouteille.
+16. [`db/item_detendeur.sql`](db/item_detendeur.sql) — moteur métier
+    Détendeurs : référentiel de périodicité administrable par (marque,
+    modèle) (`ref_periodicite_detendeur`), échéance = dernière intervention
+    connue + périodicité en vigueur.
+17. [`db/detendeur_evenement.sql`](db/detendeur_evenement.sql) — chronologie
+    détendeur : reprise des 115 interventions historiques et saisie
+    `public.enregistrer_intervention_detendeur` (5 points de contrôle
+    obligatoires — corrige la dérive « NO CTL »).
+18. [`db/preferences.sql`](db/preferences.sql) — préférences d'affichage par
     compte : `public.preference_utilisateur` (lecture limitée à sa propre
     ligne, écriture via `public.definir_invite_installation_masquee`). Porte
     aujourd'hui le « ne plus afficher » de l'invitation à installer la PWA.
@@ -382,6 +405,8 @@ psql "$SUPABASE_DB_URL" -f db/tests/rls_tests.sql
 psql "$SUPABASE_DB_URL" -f db/tests/item_etat_tests.sql
 psql "$SUPABASE_DB_URL" -f db/tests/item_bouteille_tests.sql
 psql "$SUPABASE_DB_URL" -f db/tests/campagne_tests.sql
+psql "$SUPABASE_DB_URL" -f db/tests/bouteille_evenement_tests.sql
+psql "$SUPABASE_DB_URL" -f db/tests/detendeur_evenement_tests.sql
 psql "$SUPABASE_DB_URL" -f db/tests/preferences_tests.sql
 ```
 
