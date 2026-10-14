@@ -66,13 +66,32 @@ public interface ICampaignRepository
     /// of the campaign transitions to the "En contrôle" status.
     /// </summary>
     /// <param name="campaignId">Campaign to send.</param>
-    /// <param name="bordereauNumber">Dispatch note number.</param>
+    /// <param name="bordereauNumber">
+    /// Dispatch note number, or <c>null</c>/blank when the provider only
+    /// communicates it once the bottles are physically dropped off (e.g.
+    /// Apragaz) — set it later via <see cref="SetBordereauNumberAsync"/>.
+    /// </param>
     /// <param name="sentOn">Date the campaign is sent.</param>
     /// <param name="cancellationToken">Cancels the pending request.</param>
     Task<OperationResult> SendCampaignAsync(
         long campaignId,
-        string bordereauNumber,
+        string? bordereauNumber,
         DateOnly sentOn,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Sets or corrects the bordereau number of a campaign already sent —
+    /// for a provider that only communicates it once the bottles are
+    /// physically dropped off, after <see cref="SendCampaignAsync"/> already
+    /// moved the campaign along without it. The database refuses this while
+    /// the campaign is still "preparation", or for a blank number.
+    /// </summary>
+    /// <param name="campaignId">Campaign to update.</param>
+    /// <param name="bordereauNumber">Dispatch note number; must not be blank.</param>
+    /// <param name="cancellationToken">Cancels the pending request.</param>
+    Task<OperationResult> SetBordereauNumberAsync(
+        long campaignId,
+        string bordereauNumber,
         CancellationToken cancellationToken = default);
 
     /// <summary>

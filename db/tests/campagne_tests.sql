@@ -24,6 +24,9 @@
 --    3. Envoi refusé tant qu'une ligne n'a pas de prestation renseignée ;
 --       accepté une fois toutes renseignées, bascule chaque bouteille en
 --       "en_controle".
+--    3bis. Numéro de bon optionnel à l'envoi (NULL accepté) ; renseignable
+--       après coup via public.definir_numero_bon_campagne(), refusé tant que
+--       la campagne est encore en préparation ou pour un numéro vide.
 --    4. Retour groupé partiel : la bouteille pointée revient en "en_stock"
 --       avec son compteur de contrôle et son échéance recalculés ; la
 --       bouteille non pointée reste "en_controle" et apparaît manquante.
@@ -91,6 +94,8 @@ create table moamat_test.t_campagne6       (id bigint);
 create table moamat_test.t_campagne7       (id bigint);
 create table moamat_test.t_ligne7          (id bigint);
 create table moamat_test.t_campagne8       (id bigint);
+create table moamat_test.t_campagne3bis      (id bigint);
+create table moamat_test.t_campagne3bis_prep (id bigint);
 grant all on all tables in schema moamat_test to authenticated, anon;
 
 -- -----------------------------------------------------------------------------
@@ -251,6 +256,67 @@ select moamat_test.expect(
 select moamat_test.expect(
     'envoi — les 2 bouteilles basculent en en_controle',
     (select count(*) from public.item where id in (999200001, 999200002) and statut_code = 'en_controle') = 2);
+
+-- =============================================================================
+--  3bis. Numéro de bon optionnel à l'envoi, renseignable après coup
+-- =============================================================================
+
+insert into public.item (id, famille, statut_code, actif)
+overriding system value
+values
+    (999200011, 'bouteille', 'en_stock', true),
+    -- Bouteille dédiée, restée en préparation, pour vérifier le refus de
+    -- public.definir_numero_bon_campagne() avant tout envoi.
+    (999200012, 'bouteille', 'en_stock', true);
+
+insert into public.item_bouteille (item_id, famille, matiere, date_dernier_controle_optique, date_dernier_controle_hydraulique)
+values
+    (999200011, 'plongee', 'acier', date '2024-01-15', date '2024-01-15'),
+    (999200012, 'plongee', 'acier', date '2024-01-15', date '2024-01-15');
+
+do $$
+declare
+    v_campagne_id bigint;
+    v_ligne_id bigint;
+begin
+    v_campagne_id := public.creer_campagne('Apragaz', array[999200011]);
+    insert into moamat_test.t_campagne3bis values (v_campagne_id);
+
+    select id into v_ligne_id from public.campagne_ligne
+        where campagne_id = v_campagne_id and item_id = 999200011;
+    perform public.definir_prestation_campagne_ligne(v_ligne_id, 'rr');
+
+    -- Numéro de bon absent (NULL) : accepté — certains prestataires
+    -- (ex. Apragaz) ne le communiquent qu'à la remise physique des bouteilles.
+    perform public.envoyer_campagne(v_campagne_id, null, current_date);
+
+    v_campagne_id := public.creer_campagne('Apragaz', array[999200012]);
+    insert into moamat_test.t_campagne3bis_prep values (v_campagne_id);
+end $$;
+
+select moamat_test.expect(
+    'envoi sans numero de bon — accepte, campagne envoyee',
+    (select statut from public.campagne where id = (select id from moamat_test.t_campagne3bis)) = 'envoyee');
+
+select moamat_test.expect(
+    'envoi sans numero de bon — numero_bon reste NULL',
+    (select numero_bon from public.campagne where id = (select id from moamat_test.t_campagne3bis)) is null);
+
+select moamat_test.expect_raises(
+    'numero de bon a posteriori — refuse pour une campagne en preparation',
+    format($q$ select public.definir_numero_bon_campagne(%s, 'BON-TARDIF') $q$,
+        (select id from moamat_test.t_campagne3bis_prep)));
+
+select moamat_test.expect_raises(
+    'numero de bon a posteriori — numero vide refuse',
+    format($q$ select public.definir_numero_bon_campagne(%s, '   ') $q$,
+        (select id from moamat_test.t_campagne3bis)));
+
+select public.definir_numero_bon_campagne((select id from moamat_test.t_campagne3bis), 'BON-TARDIF');
+
+select moamat_test.expect(
+    'numero de bon a posteriori — enregistre sur la campagne deja envoyee',
+    (select numero_bon from public.campagne where id = (select id from moamat_test.t_campagne3bis)) = 'BON-TARDIF');
 
 -- =============================================================================
 --  4. Retour partiel — une bouteille pointee, l'autre manquante

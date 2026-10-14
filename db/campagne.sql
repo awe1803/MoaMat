@@ -85,7 +85,10 @@
 --    4. public.definir_prestation_campagne_ligne() — saisie de la prestation
 --       par ligne (obligatoire avant envoi).
 --    5. public.envoyer_campagne()           — génère le bordereau, bascule
---       les bouteilles en « En contrôle ».
+--       les bouteilles en « En contrôle ». Le numéro de bon est OPTIONNEL
+--       (voir public.definir_numero_bon_campagne() ci-dessous).
+--    5bis. public.definir_numero_bon_campagne() — renseigne/corrige le
+--       numéro de bon après coup, une fois la campagne envoyée.
 --    6. public.pointer_retour_campagne()    — pointage groupé du retour,
 --       met à jour les compteurs de contrôle et rebascule en « En stock ».
 --    7. public.v_campagne_ligne             — vue de lecture (code club).
@@ -441,9 +444,13 @@ begin
             using errcode = 'check_violation';
     end if;
 
-    if p_numero_bon is null or btrim(p_numero_bon) = '' then
-        raise exception 'Numéro de bon obligatoire.' using errcode = 'check_violation';
-    end if;
+    -- Le numéro de bon est OPTIONNEL à l'envoi (décision actée : certains
+    -- prestataires — ex. Apragaz — ne le communiquent qu'à la remise
+    -- physique des bouteilles, après que cette fonction a déjà basculé la
+    -- campagne). Normalisé ici (vide/blanc -> NULL) pour que
+    -- public.definir_numero_bon_campagne() (ci-dessous) reste le SEUL
+    -- chemin qui décide ensuite s'il est manquant.
+    p_numero_bon := nullif(btrim(coalesce(p_numero_bon, '')), '');
 
     if p_date_envoi is null then
         raise exception 'Date d''envoi obligatoire.' using errcode = 'check_violation';
@@ -487,7 +494,10 @@ begin
     for v_item_id in select item_id from public.campagne_ligne where campagne_id = p_campagne_id loop
         update public.item
         set statut_code = 'en_controle',
-            statut_motif = format('Envoyée en campagne de réépreuve n°%s (bordereau %s)', p_campagne_id, p_numero_bon),
+            statut_motif = case
+                when p_numero_bon is null then format('Envoyée en campagne de réépreuve n°%s (bordereau à venir)', p_campagne_id)
+                else format('Envoyée en campagne de réépreuve n°%s (bordereau %s)', p_campagne_id, p_numero_bon)
+            end,
             statut_date_effet = p_date_envoi
         where id = v_item_id;
     end loop;
@@ -502,10 +512,69 @@ begin
 end $$;
 
 comment on function public.envoyer_campagne(bigint, text, date) is
-    'Génère le bordereau (numéro + date) et fait passer la campagne de "preparation" à "envoyee". Refuse si une ligne n''a pas de prestation renseignée. Re-valide l''éligibilité de chaque bouteille (active, statut dans la liste blanche en_stock/en_attente_controle/hors_validite — même règle qu''à la création) au moment de l''envoi — pas seulement à la création (public.creer_campagne()) — avec un message précis, plutôt que de laisser le trigger de transition échouer à mi-boucle si une bouteille a changé de statut entretemps (ex. prêtée). Verrouille la ligne de campagne ("for update") pour empêcher un double envoi concurrent d''écraser silencieusement le bordereau. Bascule chaque bouteille en "en_controle" via le trigger existant public.tg_item_valider_transition_statut (motif, historisation, audit). Exige "campagne.update". SECURITY DEFINER : contourne la policy item_upd, comme public.item_bouteille_appliquer_hors_validite() — restreint aux seules bouteilles validées par public.creer_campagne(). Journalisé (campagne.sent).';
+    'Génère le bordereau (date, + numéro si déjà connu) et fait passer la campagne de "preparation" à "envoyee". p_numero_bon est OPTIONNEL (normalisé vide/blanc -> NULL) : certains prestataires ne le communiquent qu''à la remise physique des bouteilles — public.definir_numero_bon_campagne() permet de le renseigner après coup. Refuse si une ligne n''a pas de prestation renseignée. Re-valide l''éligibilité de chaque bouteille (active, statut dans la liste blanche en_stock/en_attente_controle/hors_validite — même règle qu''à la création) au moment de l''envoi — pas seulement à la création (public.creer_campagne()) — avec un message précis, plutôt que de laisser le trigger de transition échouer à mi-boucle si une bouteille a changé de statut entretemps (ex. prêtée). Verrouille la ligne de campagne ("for update") pour empêcher un double envoi concurrent d''écraser silencieusement le bordereau. Bascule chaque bouteille en "en_controle" via le trigger existant public.tg_item_valider_transition_statut (motif, historisation, audit). Exige "campagne.update". SECURITY DEFINER : contourne la policy item_upd, comme public.item_bouteille_appliquer_hors_validite() — restreint aux seules bouteilles validées par public.creer_campagne(). Journalisé (campagne.sent).';
 
 revoke execute on function public.envoyer_campagne(bigint, text, date) from public;
 grant execute on function public.envoyer_campagne(bigint, text, date) to authenticated;
+
+-- -----------------------------------------------------------------------------
+--  5bis. Numéro de bon a posteriori — pour les prestataires (ex. Apragaz) qui
+--  ne le communiquent qu'à la remise physique des bouteilles, après que
+--  envoyer_campagne() a déjà basculé la campagne sans ce numéro.
+-- -----------------------------------------------------------------------------
+
+create or replace function public.definir_numero_bon_campagne(p_campagne_id bigint, p_numero_bon text)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+    v_statut     text;
+    v_numero_bon text;
+begin
+    if not public.has_permission('campagne.update') then
+        raise exception 'Droit insuffisant : permission « campagne.update » requise.'
+            using errcode = 'insufficient_privilege';
+    end if;
+
+    v_numero_bon := nullif(btrim(coalesce(p_numero_bon, '')), '');
+
+    if v_numero_bon is null then
+        raise exception 'Numéro de bon obligatoire.' using errcode = 'check_violation';
+    end if;
+
+    -- "for update" : même raisonnement que envoyer_campagne — sérialise avec
+    -- un envoi ou une suppression concurrente de la même campagne.
+    select statut into v_statut from public.campagne where id = p_campagne_id for update;
+
+    if v_statut is null then
+        raise exception 'Campagne introuvable : %.', p_campagne_id using errcode = 'no_data_found';
+    end if;
+
+    if v_statut = 'preparation' then
+        raise exception 'La campagne doit être envoyée avant de pouvoir recevoir un numéro de bon.'
+            using errcode = 'check_violation';
+    end if;
+
+    update public.campagne
+    set numero_bon = v_numero_bon, modifie_le = now()
+    where id = p_campagne_id;
+
+    perform public.audit_write(
+        'campagne.bordereau_defini',
+        'campagne',
+        p_campagne_id::text,
+        null,
+        jsonb_build_object('numero_bon', v_numero_bon),
+        '{}'::jsonb);
+end $$;
+
+comment on function public.definir_numero_bon_campagne(bigint, text) is
+    'Renseigne ou corrige le numéro de bon d''une campagne déjà envoyée ou retournée — pour un prestataire qui ne le communique qu''à la remise physique des bouteilles, après que public.envoyer_campagne() a déjà basculé la campagne sans ce numéro. Refuse une campagne encore en préparation ou un numéro vide/blanc. Verrouille la campagne ("for update"). Exige "campagne.update". Journalisé (campagne.bordereau_defini).';
+
+revoke execute on function public.definir_numero_bon_campagne(bigint, text) from public;
+grant execute on function public.definir_numero_bon_campagne(bigint, text) to authenticated;
 
 -- -----------------------------------------------------------------------------
 --  6. Retour groupé — pointage, coûts, certificats ; bouteilles non listées
