@@ -3,8 +3,9 @@
 --  Cible : Supabase / PostgreSQL 15+
 -- =============================================================================
 --
---  À exécuter APRÈS db/model_item.sql (et donc après schema / initial_load /
---  roles / permissions). AVANT db/rls.sql. Ré-exécutable : le script commence
+--  À exécuter APRÈS db/model_item.sql ET db/ref_marque.sql (et donc après
+--  schema / initial_load / roles / permissions) ; a besoin de
+--  public.moamat_normalise_marque(). AVANT db/rls.sql. Ré-exécutable : le script commence
 --  par vider public.item / public.item_* / public.item_reject
 --  (truncate ... restart identity cascade) puis recharge depuis les tables
 --  miroir. Il ne touche jamais aux tables miroir elles-mêmes.
@@ -258,7 +259,50 @@ where nullif(btrim(t.val), '') is not null
 
 -- -----------------------------------------------------------------------------
 --  4. DÉTENDEURS (+ detendeur_sortie_inventaire)
+--
+--     Rapprochement actif/déclassé (ticket « reprise détendeurs ») : un
+--     déclassé dont le n° de série du 1er étage correspond à un détendeur actif
+--     désigne le MÊME objet physique saisi deux fois côté Access (constat :
+--     detendeur_sortie_inventaire#62 (Fléron, MF7) et detendeur#79 (Seraing,
+--     EFNE) partagent le n° de série 80105-00013). Un seul enregistrement par
+--     objet (Q7bis.1) : un tel déclassé n'ouvre PAS un second item — il est
+--     fusionné dans l'item actif existant (bascule retire_du_service, sa
+--     remarque Access ajoutée à celle de l'item). Rapprochement par n° de
+--     série UNIQUEMENT (clé stable) : jamais par code_club/section, réaffectés
+--     au fil du temps et non fiables pour identifier un objet physique.
+--     detendeur_intervention.detendeur_id ne référence jamais
+--     detendeur_sortie_inventaire (espaces d'ID disjoints, vérifié) : la
+--     fusion ci-dessous ne peut donc pas crée d'ambiguïté pour la reprise des
+--     interventions (db/detendeur_evenement.sql).
 -- -----------------------------------------------------------------------------
+
+create or replace function pg_temp.detendeur_cle_serie(p text)
+returns text
+language sql
+immutable
+as $$
+    select case upper(btrim(coalesce(p, '')))
+        when '' then null
+        when 'NEANT' then null
+        else upper(btrim(p))
+    end
+$$;
+
+-- Détendeur actif correspondant à un déclassé par n° de série du 1er étage,
+-- ou NULL quand ce déclassé est un objet distinct (cas général : 14 des 15).
+create or replace function pg_temp.detendeur_actif_pour_declasse(p_declasse_id bigint)
+returns bigint
+language sql
+stable
+as $$
+    select min(d.id)
+    from public.detendeur_sortie_inventaire ds
+    join public.detendeur d
+      on pg_temp.detendeur_cle_serie(d.num_serie_premier_etage) is not null
+     and pg_temp.detendeur_cle_serie(d.num_serie_premier_etage)
+       = pg_temp.detendeur_cle_serie(ds.num_serie_premier_etage)
+    where ds.id = p_declasse_id
+$$;
 
 insert into public.item (
     code_club, famille, num_serie, marque, modele, date_acquisition, prix_eur,
@@ -268,7 +312,7 @@ select
     nullif(btrim(d.code_club), ''),
     'detendeur',
     nullif(btrim(d.num_serie_premier_etage), ''),
-    nullif(btrim(d.marque), ''),
+    public.moamat_normalise_marque(d.marque),
     nullif(btrim(d.modele_premier_etage), ''),
     d.date_achat,
     null,
@@ -282,6 +326,8 @@ select
     d.id
 from public.detendeur d;
 
+-- Déclassés NON fusionnés uniquement (cf. rapprochement ci-dessus) : un
+-- déclassé dont le n° de série correspond à un actif n'ouvre pas d'item.
 insert into public.item (
     code_club, famille, num_serie, marque, modele, date_acquisition, prix_eur,
     statut_code, lieu_contenant_id, destination, remarque, date_echeance,
@@ -290,7 +336,7 @@ select
     nullif(btrim(d.code_club), ''),
     'detendeur',
     nullif(btrim(d.num_serie_premier_etage), ''),
-    nullif(btrim(d.marque), ''),
+    public.moamat_normalise_marque(d.marque),
     nullif(btrim(d.modele_premier_etage), ''),
     d.date_achat,
     null,
@@ -302,7 +348,8 @@ select
     false,
     'detendeur_sortie_inventaire',
     d.id
-from public.detendeur_sortie_inventaire d;
+from public.detendeur_sortie_inventaire d
+where pg_temp.detendeur_actif_pour_declasse(d.id) is null;
 
 insert into public.item_detendeur (
     item_id, num_ordre, type_connexion, a_premier_etage, modele_premier_etage,
@@ -359,6 +406,43 @@ select
     d.date_dernier_controle
 from public.detendeur_sortie_inventaire d
 join public.item it on it.origine_table = 'detendeur_sortie_inventaire' and it.origine_id = d.id;
+
+-- Fusion : le déclassé n'ouvre pas d'item (exclu ci-dessus) mais son constat
+-- doit faire basculer l'item actif correspondant, enrichi de sa remarque.
+-- public.tg_item_valider_transition_statut() (db/item_etat.sql) exige motif +
+-- date d'effet pour tout changement de statut_code, et une autorité
+-- décisionnaire pour toute transition VERS un statut terminal (le cas ici,
+-- retire_du_service est terminal) : sur un REJEU après item_etat.sql, ce
+-- trigger existe déjà et bloquerait l'UPDATE sans ces colonnes transitoires.
+update public.item it
+set statut_code = 'retire_du_service',
+    actif = false,
+    remarque = nullif(btrim(concat_ws(' | ', it.remarque,
+        format('Fusionné avec détendeur déclassé #%s : %s',
+               ds.id, coalesce(nullif(btrim(ds.remarque), ''), 'DECLASSE')))), ''),
+    statut_motif = format('Reprise Access : fusion avec détendeur déclassé #%s (même n° de série 1er étage)', ds.id),
+    statut_date_effet = current_date,
+    statut_autorite = 'gestionnaire_materiel'
+from public.detendeur_sortie_inventaire ds
+where it.origine_table = 'detendeur'
+  and it.origine_id = pg_temp.detendeur_actif_pour_declasse(ds.id);
+
+do $$
+declare
+    v_actifs    bigint;
+    v_declasses bigint;
+    v_fusionnes bigint;
+    v_items     bigint;
+begin
+    select count(*) into v_actifs    from public.detendeur;
+    select count(*) into v_declasses from public.detendeur_sortie_inventaire;
+    select count(*) into v_fusionnes from public.detendeur_sortie_inventaire ds
+        where pg_temp.detendeur_actif_pour_declasse(ds.id) is not null;
+    select count(*) into v_items from public.item where origine_table in ('detendeur', 'detendeur_sortie_inventaire');
+
+    raise notice 'détendeurs : % actif(s) + % déclassé(s), dont % fusionné(s) -> % item(s) (attendu %).',
+        v_actifs, v_declasses, v_fusionnes, v_items, v_actifs + v_declasses - v_fusionnes;
+end $$;
 
 -- -----------------------------------------------------------------------------
 --  5. GILETS (+ gilet_sortie_inventaire)

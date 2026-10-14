@@ -117,6 +117,10 @@ public partial class Inventory : ComponentBase
     /// <param name="itemId">Identifier of the cylinder item.</param>
     public static string CylinderHref(long itemId) => $"bouteilles/{itemId}";
 
+    /// <summary>Link opening the fiche of a regulator.</summary>
+    /// <param name="itemId">Identifier of the regulator item.</param>
+    public static string RegulatorHref(long itemId) => $"detendeurs/{itemId}";
+
     /// <inheritdoc />
     protected override async Task OnInitializedAsync()
     {

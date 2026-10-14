@@ -147,6 +147,10 @@
                             {
                                 <a class="dr-link" href="@Inventory.CylinderHref(item.Id)">@(item.ClubCode ?? "—")</a>
                             }
+                            else if (item.FamilyCode == ItemFamily.Regulator.Code)
+                            {
+                                <a class="dr-link" href="@Inventory.RegulatorHref(item.Id)">@(item.ClubCode ?? "—")</a>
+                            }
                             else
                             {
                                 @(item.ClubCode ?? "—")

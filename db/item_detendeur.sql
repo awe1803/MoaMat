@@ -35,20 +35,18 @@
 --  « échéance inconnue » (DueStatus.Unknown) sans qu'aucun calcul ne soit
 --  jamais tenté sur une base fausse.
 --
---  Historique legacy — DÉLIBÉRÉMENT PAS repris ici : le miroir Access porte
---  402 interventions dans public.detendeur_intervention (detendeur_id), mais,
---  à la différence de public.bouteille_requalification (db/bouteille_evenement.sql,
---  où la disjonction des espaces d'id entre bouteille/bouteille_sortie_inventaire
---  a été auditée), rien ne garantit ici que detendeur_id ne puisse pas désigner
---  à la fois une ligne de detendeur ET une ligne de detendeur_sortie_inventaire
---  avec le même id — une résolution par COALESCE non vérifiée risquerait de
---  rattacher silencieusement un historique au MAUVAIS ensemble plutôt que de
---  le signaler. En l'absence de cet audit, un ensemble détendeur n'ayant connu
---  aucune intervention DEPUIS LE PASSAGE À MoaMat affiche donc « échéance
---  inconnue » même s'il a un historique Access — cohérent avec le critère
---  d'acceptation (pas de date inventée), pas un bug. La reprise de
---  detendeur_intervention, une fois l'audit fait, est un ticket séparé ; voir
---  db/detendeur_evenement.sql pour l'enregistrement des NOUVELLES interventions.
+--  Historique legacy — REPRIS (mise à jour, ticket « reprise détendeurs ») :
+--  l'audit laissé en suspens ci-dessus a été fait. public.detendeur_intervention
+--  porte 115 lignes (pas 402 — ancien commentaire erroné), et
+--  detendeur_id y référence TOUJOURS public.detendeur, jamais
+--  detendeur_sortie_inventaire : les 83 valeurs distinctes existent toutes
+--  dans detendeur.id, espaces d'id disjoints entre les deux tables miroir
+--  (vérifié, même garantie que public.bouteille_requalification). La
+--  résolution (origine_table = 'detendeur', origine_id = detendeur_id) est
+--  donc sans ambiguïté. Voir db/detendeur_evenement.sql pour la reprise
+--  elle-même (et son rattachement de date_derniere_intervention) et pour
+--  l'enregistrement des nouvelles interventions, qui porte désormais aussi
+--  les 5 points de contrôle obligatoires (ticket « reprise détendeurs »).
 --
 --  Ce fichier pose :
 --    1. public.item_detendeur.date_derniere_intervention — compteur ajouté.

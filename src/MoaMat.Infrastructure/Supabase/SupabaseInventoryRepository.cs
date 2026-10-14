@@ -135,14 +135,16 @@ internal sealed class SupabaseInventoryRepository : IInventoryRepository
     }
 
     /// <summary>
-    /// Orders the result list. On the cylinder screen, items are sorted by
-    /// nearest due date first so the crew sees what needs attention soonest;
-    /// every other screen keeps the club-code order.
+    /// Orders the result list. On the cylinder and regulator screens, items
+    /// are sorted by nearest due date first so the crew sees what needs
+    /// attention soonest; every other screen keeps the club-code order.
     /// </summary>
     /// <param name="query">Query on <c>public.v_item</c>, already filtered.</param>
     /// <param name="filter">Criteria the query was built from.</param>
     private static IPostgrestTable<ItemViewRecord> ApplyOrder(IPostgrestTable<ItemViewRecord> query, InventoryFilter filter) =>
-        string.Equals(filter.FamilyCode, ItemFamily.Cylinder.Code, StringComparison.Ordinal)
+        filter.FamilyCode is { } familyCode
+        && (string.Equals(familyCode, ItemFamily.Cylinder.Code, StringComparison.Ordinal)
+            || string.Equals(familyCode, ItemFamily.Regulator.Code, StringComparison.Ordinal))
             ? query
                 .Order("date_echeance", Constants.Ordering.Ascending, Constants.NullPosition.Last)
                 .Order("id", Constants.Ordering.Ascending)
