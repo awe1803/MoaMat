@@ -9,12 +9,20 @@ namespace MoaMat.Domain.Regulators;
 /// <remarks>
 /// A single counter, unlike <see cref="Cylinders.CylinderDueDateEngine"/>'s two
 /// independent ones. The periodicity is administrable per (brand, model)
-/// via <c>public.ref_periodicite_detendeur</c> — no fixed interval, and no
-/// due date at all until that profile has been configured: a missing rule
-/// means "not parameterized yet", never a guessed default.
+/// via <c>public.ref_periodicite_detendeur</c>, seeded with no initial rows —
+/// the gear manager configures it profile by profile over time. Until a
+/// (brand, model) has a rule, <see cref="DefaultPeriodicityInMonths"/> (12)
+/// applies instead of leaving the due date unknown, so maintenance tracking
+/// isn't blocked on referential setup; a configured rule always takes over.
 /// </remarks>
 public static class RegulatorDueDateEngine
 {
+    /// <summary>
+    /// Periodicity (months) applied when no rule yet covers a (brand, model) —
+    /// mirrors the default in <c>public.detendeur_periodicite_mois()</c>.
+    /// </summary>
+    public const int DefaultPeriodicityInMonths = 12;
+
     /// <summary>Computes the due date of the next maintenance.</summary>
     /// <param name="brand">Brand of the regulator (<c>public.item.marque</c>), or <c>null</c> when unknown.</param>
     /// <param name="model">Model of the regulator (<c>public.item.modele</c>), or <c>null</c> when unknown.</param>
@@ -23,11 +31,12 @@ public static class RegulatorDueDateEngine
     /// The periodicity referential, historized: several rules may share a
     /// (brand, model) at different <see cref="RegulatorPeriodicityRule.EffectiveOn"/>
     /// dates. The rule applied is the one in force at <paramref name="lastInterventionOn"/>,
-    /// not at today's date.
+    /// not at today's date. When none covers this (brand, model) yet,
+    /// <see cref="DefaultPeriodicityInMonths"/> is used instead.
     /// </param>
     /// <returns>
-    /// The due date, or <c>null</c> when the last intervention, the brand or
-    /// the model is unknown, or when no rule yet covers this (brand, model).
+    /// The due date, or <c>null</c> only when the last intervention, the
+    /// brand or the model is unknown.
     /// </returns>
     public static DateOnly? ComputeDueDate(
         string? brand,
@@ -51,7 +60,8 @@ public static class RegulatorDueDateEngine
             .OrderByDescending(r => r.EffectiveOn)
             .FirstOrDefault();
 
-        return rule is null ? null : AddMonthsPostgresStyle(interventionOn, rule.PeriodicityInMonths);
+        var periodicityInMonths = rule?.PeriodicityInMonths ?? DefaultPeriodicityInMonths;
+        return AddMonthsPostgresStyle(interventionOn, periodicityInMonths);
     }
 
     private static string Normalize(string value) => value.Trim().ToUpperInvariant();

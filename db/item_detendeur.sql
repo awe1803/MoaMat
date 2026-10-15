@@ -55,7 +55,9 @@
 --       (marque, modèle), comparaison insensible à la casse/aux espaces (texte
 --       libre repris du miroir, pas un enum fermé comme bouteille.famille).
 --    3. public.detendeur_echeance() — moteur : dernière intervention +
---       périodicité en vigueur à cette date, NULL si l'une des deux manque.
+--       périodicité en vigueur à cette date (défaut 12 mois tant qu'aucun
+--       profil marque/modèle n'est paramétré) ; NULL seulement si la dernière
+--       intervention elle-même est inconnue.
 --    4. public.v_item_detendeur — vue de lecture (échéance calculée).
 --    5. Synchronisation de public.item.date_echeance : depuis item_detendeur
 --       (changement de date_derniere_intervention) ET depuis item lui-même
@@ -110,6 +112,14 @@ create index if not exists ix_ref_periodicite_detendeur_lookup
 -- Résolution « en vigueur » à une date donnée — même principe que
 -- public.bouteille_periodicite_mois (db/item_bouteille.sql §3) : fondée
 -- uniquement sur date_effet, jamais sur l'ordre d'insertion.
+--
+-- Périodicité par défaut (12 mois) : contrairement aux bouteilles (6 profils
+-- réglementaires connus dès le départ), le référentiel détendeur est alimenté
+-- profil par profil au fil de l'eau par le gestionnaire. En attendant qu'une
+-- marque/modèle y soit déclarée, une échéance « inconnue » bloquait le suivi
+-- (aucune relance d'entretien possible) — moins sûr qu'une échéance par
+-- défaut prudente d'un an, à affiner dès qu'un profil spécifique est
+-- paramétré (qui prend alors le dessus, cf. le COALESCE ci-dessous).
 create or replace function public.detendeur_periodicite_mois(
     p_marque text, p_modele text, p_a_la_date date default current_date)
 returns integer
@@ -117,17 +127,20 @@ language sql
 stable
 set search_path = ''
 as $$
-    select periodicite_mois
-    from public.ref_periodicite_detendeur
-    where lower(btrim(marque)) = lower(btrim(p_marque))
-      and lower(btrim(modele)) = lower(btrim(p_modele))
-      and date_effet <= p_a_la_date
-    order by date_effet desc
-    limit 1
+    select coalesce(
+        (select periodicite_mois
+         from public.ref_periodicite_detendeur
+         where lower(btrim(marque)) = lower(btrim(p_marque))
+           and lower(btrim(modele)) = lower(btrim(p_modele))
+           and date_effet <= p_a_la_date
+         order by date_effet desc
+         limit 1),
+        12)
+    where p_marque is not null and p_modele is not null
 $$;
 
 comment on function public.detendeur_periodicite_mois(text, text, date) is
-    'Périodicité (mois) en vigueur à p_a_la_date pour (marque, modèle), comparaison insensible à la casse/aux espaces. NULL si marque/modèle manquant(s) ou si aucune ligne de référentiel ne correspond encore à ce profil (jamais une valeur par défaut).';
+    'Périodicité (mois) en vigueur à p_a_la_date pour (marque, modèle), comparaison insensible à la casse/aux espaces. Défaut 12 mois tant qu''aucune ligne de référentiel ne correspond encore à ce profil (remplacé dès qu''un profil spécifique est paramétré). NULL uniquement si marque ou modèle manquant.';
 
 -- Append-only : réutilise le trigger générique posé par db/item_bouteille.sql
 -- (public.tg_ref_bouteille_append_only ne référence que tg_table_name/tg_op,
@@ -177,7 +190,7 @@ as $$
 $$;
 
 comment on function public.detendeur_echeance(text, text, date) is
-    'Échéance d''entretien = dernière intervention connue + périodicité (marque, modèle) en vigueur à cette date. NULL si la dernière intervention est inconnue OU si la périodicité n''est pas encore paramétrée pour ce profil (jamais une date calculée sur la date d''achat, Q3.2).';
+    'Échéance d''entretien = dernière intervention connue + périodicité (marque, modèle) en vigueur à cette date, avec défaut 12 mois tant qu''aucun profil spécifique n''est paramétré (public.detendeur_periodicite_mois). NULL seulement si la dernière intervention est inconnue (jamais une date calculée sur la date d''achat, Q3.2).';
 
 -- -----------------------------------------------------------------------------
 --  4. Vue de lecture — public.v_item_detendeur (security_invoker, même famille
@@ -303,5 +316,22 @@ drop trigger if exists item_sync_date_echeance_detendeur on public.item;
 create trigger item_sync_date_echeance_detendeur
     before update of marque, modele on public.item
     for each row execute function public.tg_item_sync_date_echeance_detendeur();
+
+-- -----------------------------------------------------------------------------
+--  6. Resynchronisation — un rejeu de ce fichier (ex. après un changement de
+--     règle dans public.detendeur_periodicite_mois, comme l'ajout du défaut
+--     12 mois) ne redéclenche pas les triggers ci-dessus pour les lignes déjà
+--     en base : leur public.item.date_echeance reste figée sur l'ancienne
+--     valeur calculée tant qu'aucun UPDATE ne survient. Recalcule donc
+--     explicitement, pour tout ensemble détendeur, depuis
+--     public.v_item_detendeur (toujours à jour). Ré-exécutable, no-op si déjà
+--     synchronisé (clause WHERE ... IS DISTINCT FROM).
+-- -----------------------------------------------------------------------------
+
+update public.item i
+set date_echeance = v.echeance
+from public.v_item_detendeur v
+where v.item_id = i.id
+  and i.date_echeance is distinct from v.echeance;
 
 commit;

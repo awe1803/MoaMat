@@ -103,8 +103,16 @@ select moamat_test_detendeurs.expect(
     public.detendeur_echeance('Scubapro', 'MK25', null) is null);
 
 select moamat_test_detendeurs.expect(
-    'echeance — profil sans periodicite paramettree => NULL',
-    public.detendeur_echeance('Marque Inconnue', 'Modele Inconnu', date '2024-01-15') is null);
+    'echeance — profil sans periodicite parametree => defaut 12 mois',
+    public.detendeur_echeance('Marque Inconnue', 'Modele Inconnu', date '2024-01-15') = date '2025-01-15');
+
+select moamat_test_detendeurs.expect(
+    'periodicite — profil sans referentiel => defaut 12 mois (jamais NULL tant que marque/modele renseignes)',
+    public.detendeur_periodicite_mois('Marque Inconnue', 'Modele Inconnu', date '2024-01-15') = 12);
+
+select moamat_test_detendeurs.expect(
+    'periodicite — marque ou modele manquant => NULL (rien a resoudre)',
+    public.detendeur_periodicite_mois(null, 'MK25', date '2024-01-15') is null);
 
 select moamat_test_detendeurs.expect(
     'periodicite — resolution insensible a la casse et aux espaces superflus',
@@ -147,16 +155,16 @@ select moamat_test_detendeurs.expect(
 -- doit être recalculée pour le NOUVEAU profil, sans qu'aucune UPDATE
 -- explicite ne touche date_echeance.
 select moamat_test_detendeurs.expect(
-    'sync — profil sans periodicite avant le changement de marque/modele (temoin)',
-    public.detendeur_periodicite_mois('Marque Sans Referentiel', 'X', date '2024-01-15') is null);
+    'sync — profil sans periodicite avant le changement de marque/modele (temoin : defaut 12 mois)',
+    public.detendeur_periodicite_mois('Marque Sans Referentiel', 'X', date '2024-01-15') = 12);
 
 update public.item
 set marque = 'Marque Sans Referentiel', modele = 'X'
 where id = 999300001;
 
 select moamat_test_detendeurs.expect(
-    'sync — item.date_echeance recalculee a NULL quand marque/modele change vers un profil sans referentiel',
-    (select date_echeance from public.item where id = 999300001) is null);
+    'sync — item.date_echeance recalculee avec le defaut 12 mois quand marque/modele change vers un profil sans referentiel',
+    (select date_echeance from public.item where id = 999300001) = date '2025-01-15');
 
 update public.item
 set marque = 'Scubapro', modele = 'MK25'
