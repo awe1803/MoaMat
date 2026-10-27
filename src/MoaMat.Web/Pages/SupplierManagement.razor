@@ -1,0 +1,318 @@
+@page "/fournisseurs"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+
+<PageTitle>Fournisseurs — MoaMat</PageTitle>
+
+<div class="page-head">
+    <h1>Fournisseurs</h1>
+    <div class="sub">
+        Coordonnées des prestataires, prestations qu'ils proposent (RR, hydraulique eau / huile)
+        et historique de leurs prix.
+    </div>
+</div>
+
+@if (_error is not null)
+{
+    <p class="msg-error" role="alert">@_error</p>
+}
+
+<div class="sp-cols">
+    @* --- Liste --- *@
+    <section class="sp-list-col">
+        <div class="btn-row">
+            <AuthorizeView Policy="@AuthorizationPolicyNames.ManagerOrHigher" Context="manager">
+                <button type="button" class="btn primary" @onclick="StartNew" disabled="@_isBusy">
+                    <Icon Name="plus" Size="14" />
+                    Nouveau fournisseur
+                </button>
+            </AuthorizeView>
+            <label class="field field-check">
+                <input type="checkbox" @bind="_showInactive" />
+                <span>Afficher les archivés</span>
+            </label>
+        </div>
+
+        <div class="data-list">
+            @if (!Visible.Any())
+            {
+                <p class="data-empty">@(_isBusy ? "Chargement…" : "Aucun fournisseur.")</p>
+            }
+            @foreach (var supplier in Visible)
+            {
+                <div class="data-row sp-row @(supplier.Id == _selectedId ? "sp-sel" : null) @(supplier.IsActive ? null : "data-row-off")">
+                    <button type="button" class="sp-pick" @onclick="() => SelectAsync(supplier.Id)">
+                        <span class="sp-name">@supplier.Name</span>
+                        @if (!string.IsNullOrEmpty(supplier.ContactPerson))
+                        {
+                            <span class="sp-sub">@supplier.ContactPerson</span>
+                        }
+                    </button>
+                    @if (!supplier.IsActive)
+                    {
+                        <span class="badge neutre">archivé</span>
+                    }
+                </div>
+            }
+        </div>
+    </section>
+
+    @* --- Détail / formulaire --- *@
+    <section class="sp-detail-col">
+        @if (_showForm)
+        {
+            <form class="fiche-panel" @onsubmit="SaveAsync">
+                <h2 class="section-title">@(_isNew ? "Nouveau fournisseur" : "Modifier le fournisseur")</h2>
+                <div class="form-grid">
+                    <label class="field">
+                        <span>Nom *</span>
+                        <input type="text" @bind="_name" maxlength="@SupplierDraft.NameMaxLength" required />
+                    </label>
+                    <label class="field">
+                        <span>Personne de contact</span>
+                        <input type="text" @bind="_contactPerson" maxlength="@SupplierDraft.ContactPersonMaxLength" />
+                    </label>
+                    <label class="field">
+                        <span>Téléphone</span>
+                        <input type="tel" @bind="_phone" maxlength="@SupplierDraft.PhoneMaxLength" />
+                    </label>
+                    <label class="field">
+                        <span>Email</span>
+                        <input type="email" @bind="_email" maxlength="@SupplierDraft.EmailMaxLength" />
+                    </label>
+                    <label class="field">
+                        <span>Site web</span>
+                        <input type="text" inputmode="url" placeholder="https://" @bind="_website"
+                               maxlength="@SupplierDraft.WebsiteMaxLength" />
+                    </label>
+                    <label class="field">
+                        <span>Adresse</span>
+                        <input type="text" @bind="_address" maxlength="@SupplierDraft.AddressMaxLength" />
+                    </label>
+                </div>
+                <div class="btn-row">
+                    <button type="submit" class="btn primary" disabled="@_isBusy">Enregistrer</button>
+                    <button type="button" class="btn" @onclick="CancelForm" disabled="@_isBusy">Annuler</button>
+                </div>
+            </form>
+        }
+        else if (Selected is { } supplier)
+        {
+            <div class="fiche-panel">
+                <div class="sp-title">
+                    <h2 class="section-title">@supplier.Name</h2>
+                    @if (!supplier.IsActive)
+                    {
+                        <span class="badge neutre">archivé</span>
+                    }
+                </div>
+
+                <dl class="sp-contact">
+                    <dt>Contact</dt>
+                    <dd>@(supplier.ContactPerson ?? "—")</dd>
+                    <dt>Téléphone</dt>
+                    <dd>
+                        @if (supplier.Phone is not null)
+                        {
+                            <a href="@PhoneHref(supplier.Phone)">@supplier.Phone</a>
+                        }
+                        else
+                        {
+                            @("—")
+                        }
+                    </dd>
+                    <dt>Email</dt>
+                    <dd>
+                        @if (supplier.Email is not null)
+                        {
+                            <a href="mailto:@supplier.Email">@supplier.Email</a>
+                        }
+                        else
+                        {
+                            @("—")
+                        }
+                    </dd>
+                    <dt>Site web</dt>
+                    <dd>
+                        @if (supplier.WebsiteUrl is not null)
+                        {
+                            <a href="@supplier.WebsiteUrl" target="_blank" rel="noopener noreferrer">@supplier.WebsiteUrl</a>
+                        }
+                        else
+                        {
+                            @("—")
+                        }
+                    </dd>
+                    <dt>Adresse</dt>
+                    <dd>@(supplier.Address ?? "—")</dd>
+                </dl>
+
+                <AuthorizeView Policy="@AuthorizationPolicyNames.ManagerOrHigher" Context="manager">
+                    <div class="btn-row">
+                        <button type="button" class="btn" @onclick="StartEdit" disabled="@_isBusy">
+                            <Icon Name="edit" Size="14" />
+                            Modifier
+                        </button>
+                        <button type="button" class="btn" @onclick="ToggleActiveAsync" disabled="@_isBusy">
+                            @(supplier.IsActive ? "Archiver" : "Réactiver")
+                        </button>
+                        <AuthorizeView Policy="@AuthorizationPolicyNames.AdministratorOrHigher" Context="admin">
+                            <button type="button" class="btn danger" @onclick="DeleteAsync" disabled="@_isBusy">
+                                @(_confirmDelete ? "Confirmer la suppression définitive" : "Supprimer")
+                            </button>
+                        </AuthorizeView>
+                    </div>
+                </AuthorizeView>
+            </div>
+
+            @* --- Prestations et prix en vigueur --- *@
+            <div class="fiche-panel">
+                <h2 class="section-title">Prestations et prix</h2>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Prestation</th>
+                            <th>Proposée</th>
+                            <th>Prix actuel</th>
+                            <th>Prochain prix</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var service in CylinderServiceType.All)
+                        {
+                            var offered = supplier.Services.Contains(service);
+                            var current = CurrentTariff(service);
+                            var upcoming = UpcomingTariff(service);
+                            <tr>
+                                <td>@service.DisplayName</td>
+                                <td>
+                                    <AuthorizeView Policy="@AuthorizationPolicyNames.ManagerOrHigher" Context="manager">
+                                        <Authorized>
+                                            <input type="checkbox" checked="@offered" disabled="@(_isBusy || (offered && HasTariffs(service)))"
+                                                   title="@(offered && HasTariffs(service) ? "Des prix existent : impossible de retirer la prestation." : null)"
+                                                   aria-label="@service.DisplayName proposée"
+                                                   @onchange="e => ToggleServiceAsync(service, (bool)e.Value!)" />
+                                        </Authorized>
+                                        <NotAuthorized>
+                                            @(offered ? "Oui" : "Non")
+                                        </NotAuthorized>
+                                    </AuthorizeView>
+                                </td>
+                                <td>
+                                    @if (current is not null)
+                                    {
+                                        <strong>@FormatPrice(current.PriceEur)</strong>
+                                        <span class="msg-muted"> depuis le @FormatDate(current.EffectiveOn)</span>
+                                    }
+                                    else
+                                    {
+                                        @("—")
+                                    }
+                                </td>
+                                <td>
+                                    @if (upcoming is not null)
+                                    {
+                                        @($"{FormatPrice(upcoming.PriceEur)} le {FormatDate(upcoming.EffectiveOn)}")
+                                    }
+                                    else
+                                    {
+                                        @("—")
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+
+                <AuthorizeView Policy="@AuthorizationPolicyNames.ManagerOrHigher" Context="manager">
+                    @if (supplier.Services.Count > 0)
+                    {
+                        <form class="sp-tariff-form" @onsubmit="AddTariffAsync">
+                            <h3 class="sp-subtitle">Nouveau prix</h3>
+                            <div class="form-grid">
+                                <label class="field">
+                                    <span>Prestation</span>
+                                    <select @bind="_tariffService" required>
+                                        <option value="">— à choisir —</option>
+                                        @foreach (var service in supplier.Services)
+                                        {
+                                            <option value="@service.Code">@service.DisplayName</option>
+                                        }
+                                    </select>
+                                </label>
+                                <label class="field">
+                                    <span>Prix (€)</span>
+                                    <input type="number" step="0.01" min="0" @bind="_tariffPrice" required />
+                                </label>
+                                <label class="field">
+                                    <span>Applicable à partir du</span>
+                                    <input type="date" @bind="_tariffDate" required />
+                                </label>
+                            </div>
+                            <div class="btn-row">
+                                <button type="submit" class="btn primary" disabled="@_isBusy">Ajouter le prix</button>
+                            </div>
+                            <p class="msg-muted">
+                                Un prix n'est jamais modifié : un changement est un nouveau prix avec une
+                                nouvelle date d'effet, l'ancien reste dans l'historique.
+                            </p>
+                        </form>
+                    }
+                    else
+                    {
+                        <p class="msg-muted">Cocher au moins une prestation pour saisir un prix.</p>
+                    }
+                </AuthorizeView>
+
+                <p class="msg-info">
+                    Les prix du fournisseur « Apragaz » servent à chiffrer les campagnes de bouteilles :
+                    un nouveau prix s'applique aux prestations choisies après sa date d'effet
+                    (les coûts déjà estimés ne sont pas recalculés).
+                </p>
+            </div>
+
+            @* --- Historique --- *@
+            <div class="fiche-panel">
+                <h2 class="section-title">Historique des prix</h2>
+                @if (_tariffs.Count == 0)
+                {
+                    <p class="data-empty">Aucun prix enregistré.</p>
+                }
+                else
+                {
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>À partir du</th>
+                                <th>Prestation</th>
+                                <th>Prix</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var tariff in _tariffs.OrderByDescending(t => t.EffectiveOn).ThenBy(t => t.Service.Code))
+                            {
+                                <tr>
+                                    <td>@FormatDate(tariff.EffectiveOn)</td>
+                                    <td>@tariff.Service.DisplayName</td>
+                                    <td>@FormatPrice(tariff.PriceEur)</td>
+                                    <td>
+                                        <AuthorizeView Policy="@AuthorizationPolicyNames.AdministratorOrHigher" Context="admin">
+                                            <button type="button" class="btn danger btn-sm" title="Supprimer ce prix (saisie erronée)"
+                                                    disabled="@_isBusy" @onclick="() => DeleteTariffAsync(tariff.Id)">
+                                                <Icon Name="close" Size="14" />
+                                            </button>
+                                        </AuthorizeView>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </div>
+        }
+        else
+        {
+            <p class="msg-muted">Choisir un fournisseur dans la liste.</p>
+        }
+    </section>
+</div>

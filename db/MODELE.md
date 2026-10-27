@@ -51,6 +51,7 @@ Access CSV ─► [schema.sql + initial_load.sql]      staging (miroir, inchang�
 | 11 | `comptes.sql`       | écran /comptes |
 | 12 | `storage.sql`       | buckets Storage |
 | 13 | **`campagne.sql`**  | **campagnes de réépreuve : préparation, bordereau, retour groupé, bouteilles manquantes — voir `MODELE.md` §11** |
+| — | **`fournisseur.sql`** | **fournisseurs : `ref_fournisseur` (coordonnées), `ref_fournisseur_prestation`, `ref_fournisseur_tarif` (historique daté, append-only côté UPDATE), amorçage Apragaz ; permissions `fournisseur.*` ; à lancer après `item_bouteille.sql`** |
 | 14 | **`bouteille_evenement.sql`** | **chronologie d'une bouteille : reprise des 412 réépreuves (jointure par ID interne, 3 orphelins traités), requalification, incident — voir `MODELE.md` §12** |
 
 ### Transition / repli

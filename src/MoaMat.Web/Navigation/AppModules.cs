@@ -88,6 +88,16 @@ public static class AppModules
             tag: "phase 3",
             text: "Comparaison de devis, suivi budgétaire par famille et par exercice, factures scannées."),
         Family(ItemFamily.SparePart, "Gestion", "pieces", "Pièces détachées"),
+        new()
+        {
+            Key = "fournisseurs",
+            Group = "Gestion",
+            Icon = "fournisseurs",
+            Title = "Fournisseurs",
+            Subtitle = "contacts, prestations, tarifs",
+            Href = "fournisseurs",
+            Policy = AuthorizationPolicyNames.ReaderOrHigher,
+        },
 
         new()
         {

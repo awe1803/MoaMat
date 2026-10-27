@@ -4,11 +4,11 @@ using Supabase.Postgrest.Models;
 namespace MoaMat.Infrastructure.Supabase.Records;
 
 /// <summary>
-/// PostgREST shape of one row of <c>public.ref_tarif_apragaz</c>
-/// (<c>db/item_bouteille.sql</c>). Read-only from the client — the referential
-/// is append-only, written by an administrator through <c>referentiel.create</c>.
+/// PostgREST shape of one row of <c>public.v_tarif_campagne</c>
+/// (<c>db/fournisseur.sql</c>): the price history of the Apragaz supplier. Read-only
+/// from the client — prices are maintained on the suppliers screen.
 /// </summary>
-[Table("ref_tarif_apragaz")]
+[Table("v_tarif_campagne")]
 internal sealed class CylinderPricingRuleRecord : BaseModel
 {
     [PrimaryKey("id", false)]

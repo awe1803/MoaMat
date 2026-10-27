@@ -8,8 +8,10 @@
 --  À exécuter APRÈS db/model_item.sql, db/transform_item.sql, db/rls.sql,
 --  db/audit.sql, db/item_etat.sql et db/item_bouteille.sql (a besoin de
 --  public.item, public.item_bouteille, public.has_permission,
---  public.bouteille_tarif_apragaz et du trigger
 --  public.tg_item_valider_transition_statut). Ré-exécutable sans erreur.
+--  Le chiffrage d'une prestation appelle public.campagne_tarif_prestation()
+--  (db/fournisseur.sql, résolue à l'appel) : exécuter db/fournisseur.sql
+--  avant d'utiliser les campagnes.
 --
 --  Fusion des tickets « entité Campagne » + « écran préparation » +
 --  « écran retour ». Toutes les écritures passent par des fonctions
@@ -392,12 +394,12 @@ begin
 
     update public.campagne_ligne
     set type_prestation = p_type_prestation,
-        cout_estime_eur = public.bouteille_tarif_apragaz(p_type_prestation, current_date)
+        cout_estime_eur = public.campagne_tarif_prestation(p_type_prestation, current_date)
     where id = p_ligne_id;
 end $$;
 
 comment on function public.definir_prestation_campagne_ligne(bigint, text) is
-    'Renseigne la prestation (rr / hydraulique_huile / hydraulique_eau) d''une ligne de campagne encore en préparation et recalcule son coût estimé via public.bouteille_tarif_apragaz(). Exige "campagne.update".';
+    'Renseigne la prestation (rr / hydraulique_huile / hydraulique_eau) d''une ligne de campagne encore en préparation et recalcule son coût estimé via public.campagne_tarif_prestation() (prix du fournisseur Apragaz, db/fournisseur.sql). Exige "campagne.update".';
 
 revoke execute on function public.definir_prestation_campagne_ligne(bigint, text) from public;
 grant execute on function public.definir_prestation_campagne_ligne(bigint, text) to authenticated;

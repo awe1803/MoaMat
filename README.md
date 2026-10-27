@@ -391,6 +391,15 @@ Dans l'éditeur SQL Supabase (ou via `psql`), exécuter **dans l'ordre** :
     compte : `public.preference_utilisateur` (lecture limitée à sa propre
     ligne, écriture via `public.definir_invite_installation_masquee`). Porte
     aujourd'hui le « ne plus afficher » de l'invitation à installer la PWA.
+19. [`db/fournisseur.sql`](db/fournisseur.sql) — fournisseurs / prestataires :
+    coordonnées (`ref_fournisseur`), prestations proposées
+    (`ref_fournisseur_prestation`) et historique daté des prix
+    (`ref_fournisseur_tarif`, un changement de prix = une nouvelle ligne),
+    reprise unique des tarifs Apragaz depuis `ref_tarif_apragaz`. Écran
+    `/fournisseurs`. Les prix du fournisseur Apragaz sont la SEULE source du
+    chiffrage des campagnes (`public.campagne_tarif_prestation()`, vue
+    `public.v_tarif_campagne`, sans repli sur l'ancien référentiel) : à
+    exécuter avant d'utiliser les campagnes.
 
 Tous ces scripts sont ré-exécutables. Ensuite : activer le hook
 *Custom Access Token* (Dashboard → Authentication → Hooks →
@@ -408,6 +417,7 @@ psql "$SUPABASE_DB_URL" -f db/tests/campagne_tests.sql
 psql "$SUPABASE_DB_URL" -f db/tests/bouteille_evenement_tests.sql
 psql "$SUPABASE_DB_URL" -f db/tests/detendeur_evenement_tests.sql
 psql "$SUPABASE_DB_URL" -f db/tests/preferences_tests.sql
+psql "$SUPABASE_DB_URL" -f db/tests/fournisseur_tests.sql
 ```
 
 Modèle de sécurité complet : [`db/SECURITE.md`](db/SECURITE.md).

@@ -9,6 +9,7 @@ using MoaMat.Domain.Locations;
 using MoaMat.Domain.Notifications;
 using MoaMat.Domain.Preferences;
 using MoaMat.Domain.Regulators;
+using MoaMat.Domain.Suppliers;
 using MoaMat.Infrastructure.Documents;
 using MoaMat.Infrastructure.Supabase;
 
@@ -40,6 +41,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IInventoryRepository, SupabaseInventoryRepository>();
         services.AddSingleton<ILifeSheetRenderer, PdfLifeSheetRenderer>();
         services.AddScoped<ILocationRepository, SupabaseLocationRepository>();
+        services.AddScoped<ISupplierRepository, SupabaseSupplierRepository>();
         services.AddScoped<IPushSubscriptionRepository, SupabasePushSubscriptionRepository>();
         services.AddScoped<IRegulatorRepository, SupabaseRegulatorRepository>();
         services.AddScoped<IUserPreferenceRepository, SupabaseUserPreferenceRepository>();
