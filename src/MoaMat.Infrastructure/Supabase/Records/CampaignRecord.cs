@@ -18,6 +18,9 @@ internal sealed class CampaignRecord : BaseModel
     [Column("prestataire")]
     public string Prestataire { get; set; } = string.Empty;
 
+    [Column("fournisseur_id")]
+    public long FournisseurId { get; set; }
+
     [Column("statut")]
     public string Statut { get; set; } = string.Empty;
 

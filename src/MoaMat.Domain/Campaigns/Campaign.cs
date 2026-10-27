@@ -24,6 +24,9 @@ public sealed record Campaign
     /// <summary>External provider the bottles are sent to (e.g. "Apragaz").</summary>
     public required string Provider { get; init; }
 
+    /// <summary>Supplier whose service catalogue feeds the lines of this campaign.</summary>
+    public required long SupplierId { get; init; }
+
     /// <summary>Current step of the campaign's lifecycle.</summary>
     public required CampaignStatus Status { get; init; }
 
@@ -61,7 +64,7 @@ public sealed record Campaign
     public IEnumerable<CampaignLine> MissingLines => Lines.Where(line => line.IsMissing(Status));
 
     /// <summary>Lines still missing their billed service — sending is blocked while this is non-empty.</summary>
-    public IEnumerable<CampaignLine> LinesMissingService => Lines.Where(line => line.ServiceType is null);
+    public IEnumerable<CampaignLine> LinesMissingService => Lines.Where(line => line.Service is null);
 
     /// <summary>
     /// Sum of every line's <see cref="CampaignLine.EstimatedCostEur"/>; <c>null</c>

@@ -1,13 +1,12 @@
 using MoaMat.Domain.Campaigns;
 using MoaMat.Domain.Common;
-using MoaMat.Domain.Cylinders;
 using MoaMat.Infrastructure.Supabase.Records;
 
 namespace MoaMat.Infrastructure.Supabase.Mapping;
 
 /// <summary>
-/// Maps <see cref="CampaignRecord"/>/<see cref="CampaignLineRecord"/> and
-/// <see cref="CylinderPricingRuleRecord"/> to their domain equivalents.
+/// Maps <see cref="CampaignRecord"/> and <see cref="CampaignLineRecord"/> to
+/// their domain equivalents.
 /// </summary>
 internal static class CampaignMapper
 {
@@ -18,6 +17,7 @@ internal static class CampaignMapper
     {
         Id = record.Id,
         Provider = record.Prestataire,
+        SupplierId = record.FournisseurId,
         Status = ToStatus(record.Statut),
         BordereauNumber = record.NumeroBon,
         SentOn = SqlDateConverter.ToDateOnly(record.DateEnvoi),
@@ -35,36 +35,19 @@ internal static class CampaignMapper
         CampaignId = record.CampagneId,
         ItemId = record.ItemId,
         ItemClubCode = record.ItemCodeClub,
-        ServiceType = CylinderServiceType.FromCode(record.TypePrestation),
+        Service = record.PrestationId is { } serviceId
+            ? new CampaignService(
+                serviceId,
+                record.PrestationLibelle ?? string.Empty,
+                SupplierMapper.ToControl(record.ControleCylindre),
+                SupplierMapper.ToMethod(record.MethodeHydraulique))
+            : null,
         EstimatedCostEur = record.CoutEstimeEur,
         ActualCostEur = record.CoutReelEur,
         CertificateNumber = record.NumCertificat,
         Outcome = ToOutcome(record.Resultat),
         ReturnedOn = SqlDateConverter.ToDateOnly(record.DateRetourLigne),
     };
-
-    /// <summary>Converts one pricing referential row.</summary>
-    /// <param name="record">PostgREST row of <c>public.v_tarif_campagne</c>.</param>
-    public static CylinderPricingRule? ToDomain(CylinderPricingRuleRecord record)
-    {
-        var serviceType = CylinderServiceType.FromCode(record.TypePrestation);
-        if (serviceType is null)
-        {
-            return null;
-        }
-
-        if (SqlDateConverter.ToDateOnly(record.DateEffet) is not { } effectiveOn)
-        {
-            // date_effet is "not null" in the schema, so this can only mean the
-            // row and the app have drifted out of sync — surfacing it as a
-            // clear DataAccessException beats an opaque NullReferenceException
-            // from the null-forgiving operator this replaces.
-            throw new DataAccessException(
-                $"Référentiel tarifaire incohérent : date d'effet manquante pour la prestation « {record.TypePrestation} » (id {record.Id}).");
-        }
-
-        return new CylinderPricingRule(serviceType, record.PrixEur, effectiveOn);
-    }
 
     /// <summary>
     /// <c>resultat</c> is nullable (not yet pointed) unlike <c>statut</c>, so

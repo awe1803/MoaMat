@@ -40,10 +40,19 @@
                         <div class="data-row lx-row @(section.Id == _selectedSectionId ? "lx-sel" : null)">
                             <button type="button" class="lx-pick"
                                     @onclick="() => SelectSectionAsync(section.Id)">@section.Label</button>
-                            <button type="button" class="btn danger" title="Supprimer"
-                                    @onclick="() => DeleteSectionAsync(section.Id)">
-                                <Icon Name="close" Size="14" />
-                            </button>
+                            @if (IsPending("section", section.Id))
+                            {
+                                <span class="msg-muted">Supprimer ?</span>
+                                <button type="button" class="btn danger" @onclick="() => DeleteSectionAsync(section.Id)" disabled="@_isBusy">Confirmer</button>
+                                <button type="button" class="btn" @onclick="CancelDelete" disabled="@_isBusy">Annuler</button>
+                            }
+                            else
+                            {
+                                <button type="button" class="btn danger" title="Supprimer" aria-label="Supprimer la section"
+                                        @onclick='() => RequestDelete("section", section.Id)'>
+                                    <Icon Name="close" Size="14" />
+                                </button>
+                            }
                         </div>
                     }
                 </div>
@@ -75,10 +84,19 @@
                             <div class="data-row lx-row @(room.Id == _selectedRoomId ? "lx-sel" : null)">
                                 <button type="button" class="lx-pick"
                                         @onclick="() => SelectRoomAsync(room.Id)">@room.Label</button>
-                                <button type="button" class="btn danger" title="Supprimer"
-                                        @onclick="() => DeleteRoomAsync(room.Id)">
-                                    <Icon Name="close" Size="14" />
-                                </button>
+                                @if (IsPending("room", room.Id))
+                                {
+                                    <span class="msg-muted">Supprimer ?</span>
+                                    <button type="button" class="btn danger" @onclick="() => DeleteRoomAsync(room.Id)" disabled="@_isBusy">Confirmer</button>
+                                    <button type="button" class="btn" @onclick="CancelDelete" disabled="@_isBusy">Annuler</button>
+                                }
+                                else
+                                {
+                                    <button type="button" class="btn danger" title="Supprimer" aria-label="Supprimer le local"
+                                            @onclick='() => RequestDelete("room", room.Id)'>
+                                        <Icon Name="close" Size="14" />
+                                    </button>
+                                }
                             </div>
                         }
                     </div>
@@ -110,10 +128,19 @@
                         {
                             <div class="data-row lx-row">
                                 <span class="lx-pick lx-leaf">@container.Label</span>
-                                <button type="button" class="btn danger" title="Supprimer"
-                                        @onclick="() => DeleteContainerAsync(container.Id)">
-                                    <Icon Name="close" Size="14" />
-                                </button>
+                                @if (IsPending("container", container.Id))
+                                {
+                                    <span class="msg-muted">Supprimer ?</span>
+                                    <button type="button" class="btn danger" @onclick="() => DeleteContainerAsync(container.Id)" disabled="@_isBusy">Confirmer</button>
+                                    <button type="button" class="btn" @onclick="CancelDelete" disabled="@_isBusy">Annuler</button>
+                                }
+                                else
+                                {
+                                    <button type="button" class="btn danger" title="Supprimer" aria-label="Supprimer le contenant"
+                                            @onclick='() => RequestDelete("container", container.Id)'>
+                                        <Icon Name="close" Size="14" />
+                                    </button>
+                                }
                             </div>
                         }
                     </div>

@@ -24,8 +24,17 @@ internal sealed class CampaignLineRecord : BaseModel
     [Column("item_code_club")]
     public string? ItemCodeClub { get; set; }
 
-    [Column("type_prestation")]
-    public string? TypePrestation { get; set; }
+    [Column("prestation_id")]
+    public long? PrestationId { get; set; }
+
+    [Column("prestation_libelle")]
+    public string? PrestationLibelle { get; set; }
+
+    [Column("controle_cylindre")]
+    public string? ControleCylindre { get; set; }
+
+    [Column("methode_hydraulique")]
+    public string? MethodeHydraulique { get; set; }
 
     [Column("cout_estime_eur")]
     public decimal? CoutEstimeEur { get; set; }

@@ -88,3 +88,7 @@
     margin: 0;
     font-size: 13px;
 }
+
+.sp-inactive {
+    opacity: 0.6;
+}

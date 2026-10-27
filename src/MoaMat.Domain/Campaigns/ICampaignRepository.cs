@@ -1,5 +1,4 @@
 using MoaMat.Domain.Common;
-using MoaMat.Domain.Cylinders;
 
 namespace MoaMat.Domain.Campaigns;
 
@@ -12,7 +11,7 @@ namespace MoaMat.Domain.Campaigns;
 /// <b>not</b> a blanket contract here — it varies per write, because a
 /// campaign's lifecycle steps are one-shot by nature:
 /// <list type="bullet">
-/// <item><see cref="SetLineServiceTypeAsync"/> and <see cref="RecordReturnAsync"/>
+/// <item><see cref="SetLineServiceAsync"/> and <see cref="RecordReturnAsync"/>
 /// are idempotent: replaying the same service assignment, or the same return
 /// submission against an already-returned campaign, converges on the same
 /// state.</item>
@@ -35,15 +34,14 @@ public interface ICampaignRepository
     /// <param name="cancellationToken">Cancels the pending request.</param>
     Task<Campaign?> GetCampaignAsync(long campaignId, CancellationToken cancellationToken = default);
 
-    /// <summary>Apragaz pricing referential, for client-side estimation via <see cref="CylinderPricingEngine"/>.</summary>
-    /// <param name="cancellationToken">Cancels the pending request.</param>
-    Task<IReadOnlyList<CylinderPricingRule>> GetPricingRulesAsync(CancellationToken cancellationToken = default);
-
     /// <summary>
     /// Creates a campaign in <see cref="CampaignStatus.Preparation"/> with one
-    /// line per selected bottle; each line's service type starts unset.
+    /// line per selected bottle; each line's service starts unset.
     /// </summary>
-    /// <param name="provider">External provider the bottles will be sent to.</param>
+    /// <param name="provider">
+    /// Name of the supplier the bottles will be sent to; must match an existing
+    /// supplier (the database refuses an unknown one rather than creating it).
+    /// </param>
     /// <param name="itemIds">Bottles to include, from the inventory's due-soon list.</param>
     /// <param name="cancellationToken">Cancels the pending request.</param>
     Task<OperationResult<long>> CreateCampaignAsync(
@@ -51,13 +49,29 @@ public interface ICampaignRepository
         IReadOnlyCollection<long> itemIds,
         CancellationToken cancellationToken = default);
 
-    /// <summary>Sets or corrects one line's billed service, while the campaign is still in preparation.</summary>
-    /// <param name="lineId">Line to update.</param>
-    /// <param name="serviceType">Service billed for this bottle.</param>
+    /// <summary>
+    /// Changes the supplier of a campaign still in preparation. Services belong
+    /// to one supplier, so every line's service is reset to "to choose".
+    /// </summary>
+    /// <param name="campaignId">Campaign to update.</param>
+    /// <param name="supplierId">New supplier.</param>
     /// <param name="cancellationToken">Cancels the pending request.</param>
-    Task<OperationResult> SetLineServiceTypeAsync(
+    Task<OperationResult> SetCampaignSupplierAsync(
+        long campaignId,
+        long supplierId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Sets or corrects one line's billed service, while the campaign is still
+    /// in preparation. The database refuses a service of another supplier, a
+    /// deactivated one, or a free service (no bottle control).
+    /// </summary>
+    /// <param name="lineId">Line to update.</param>
+    /// <param name="serviceId">Service of the campaign supplier's catalogue billed for this bottle.</param>
+    /// <param name="cancellationToken">Cancels the pending request.</param>
+    Task<OperationResult> SetLineServiceAsync(
         long lineId,
-        CylinderServiceType serviceType,
+        long serviceId,
         CancellationToken cancellationToken = default);
 
     /// <summary>

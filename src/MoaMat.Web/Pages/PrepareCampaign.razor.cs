@@ -1,22 +1,23 @@
+using System.Globalization;
 using Microsoft.AspNetCore.Components;
 using MoaMat.Domain.Campaigns;
 using MoaMat.Domain.Common;
-using MoaMat.Domain.Cylinders;
 using MoaMat.Domain.Inventory;
+using MoaMat.Domain.Suppliers;
 
 namespace MoaMat.Web.Pages;
 
 /// <summary>
 /// "Préparer une campagne" screen: select bottles nearing their due date,
 /// estimate cost, then send the bordereau once every line has its service
-/// type set.
+/// picked from the supplier's catalogue.
 /// </summary>
 /// <remarks>
 /// Two phases share this one screen, distinguished by <see cref="CampaignId"/>:
 /// with no campaign yet, the manager picks bottles from the due-soon list;
 /// once <see cref="ICampaignRepository.CreateCampaignAsync"/> has returned an
 /// id (carried in the query string so a reload does not lose the campaign),
-/// the screen shows its lines for service-type entry and, once complete, the
+/// the screen shows its lines for service entry and, once complete, the
 /// bordereau fields.
 /// </remarks>
 public partial class PrepareCampaign : ComponentBase
@@ -25,7 +26,8 @@ public partial class PrepareCampaign : ComponentBase
 
     private readonly List<InventoryItem> _dueSoonItems = [];
     private readonly HashSet<long> _selectedItemIds = [];
-    private readonly List<CylinderPricingRule> _pricingRules = [];
+    private readonly List<SupplierService> _services = [];
+    private readonly List<Supplier> _suppliers = [];
     private readonly List<Campaign> _resumableCampaigns = [];
 
     private Campaign? _campaign;
@@ -45,6 +47,9 @@ public partial class PrepareCampaign : ComponentBase
 
     [Inject]
     private IInventoryRepository Inventory { get; set; } = default!;
+
+    [Inject]
+    private ISupplierRepository Suppliers { get; set; } = default!;
 
     [Inject]
     private NavigationManager Navigation { get; set; } = default!;
@@ -81,11 +86,37 @@ public partial class PrepareCampaign : ComponentBase
             if (CampaignId is { } id)
             {
                 _campaign = await Campaigns.GetCampaignAsync(id);
-                _pricingRules.Clear();
-                _pricingRules.AddRange(await Campaigns.GetPricingRulesAsync());
+                _services.Clear();
+                _suppliers.Clear();
+                // Archived suppliers are not offered, except the one this campaign already has.
+                _suppliers.AddRange((await Suppliers.GetSuppliersAsync())
+                    .Where(supplier => supplier.IsActive || supplier.Id == _campaign?.SupplierId));
+
+                if (_campaign is not null)
+                {
+                    // Only the campaign supplier's bottle-control services are
+                    // offered (a free service feeds no counter), plus any
+                    // deactivated service a line already carries so its
+                    // selection stays visible.
+                    var assignedIds = _campaign.Lines
+                        .Where(line => line.Service is not null)
+                        .Select(line => line.Service!.Id)
+                        .ToHashSet();
+                    var catalogue = await Suppliers.GetServicesAsync(_campaign.SupplierId);
+
+                    _services.AddRange(catalogue.Where(service =>
+                        service.IsCylinderService && (service.IsActive || assignedIds.Contains(service.Id))));
+                }
             }
             else
             {
+                _suppliers.Clear();
+                _suppliers.AddRange((await Suppliers.GetSuppliersAsync()).Where(supplier => supplier.IsActive));
+                if (!_suppliers.Any(supplier => string.Equals(supplier.Name, _provider, StringComparison.OrdinalIgnoreCase)))
+                {
+                    _provider = _suppliers.FirstOrDefault()?.Name ?? string.Empty;
+                }
+
                 var today = DateOnly.FromDateTime(DateTime.Today);
                 var items = await Inventory.GetItemsAsync(new InventoryFilter
                 {
@@ -170,15 +201,15 @@ public partial class PrepareCampaign : ComponentBase
         }
     }
 
-    private async Task SetLineServiceTypeAsync(CampaignLine line, string? serviceCode)
+    private async Task ChangeSupplierAsync(string? supplierIdText)
     {
-        if (_isSubmitting)
+        if (_isSubmitting || _campaign is not { } campaign)
         {
             return;
         }
 
-        var serviceType = CylinderServiceType.FromCode(serviceCode);
-        if (serviceType is null)
+        if (!long.TryParse(supplierIdText, NumberStyles.None, CultureInfo.InvariantCulture, out var supplierId)
+            || supplierId == campaign.SupplierId)
         {
             return;
         }
@@ -187,7 +218,40 @@ public partial class PrepareCampaign : ComponentBase
 
         try
         {
-            var result = await Campaigns.SetLineServiceTypeAsync(line.Id, serviceType);
+            var result = await Campaigns.SetCampaignSupplierAsync(campaign.Id, supplierId);
+
+            // Applied after the reload for the same reason as in
+            // SetLineServiceAsync: ReloadAsync clears _error first.
+            await ReloadAsync();
+
+            if (!result.Succeeded)
+            {
+                _error = result.Error;
+            }
+        }
+        finally
+        {
+            _isSubmitting = false;
+        }
+    }
+
+    private async Task SetLineServiceAsync(CampaignLine line, string? serviceIdText)
+    {
+        if (_isSubmitting)
+        {
+            return;
+        }
+
+        if (!long.TryParse(serviceIdText, NumberStyles.None, CultureInfo.InvariantCulture, out var serviceId))
+        {
+            return;
+        }
+
+        _isSubmitting = true;
+
+        try
+        {
+            var result = await Campaigns.SetLineServiceAsync(line.Id, serviceId);
 
             // ReloadAsync() clears _error as its very first step (it is also
             // the "fresh load" path, where an earlier message must not
@@ -237,10 +301,9 @@ public partial class PrepareCampaign : ComponentBase
         }
     }
 
-    /// <summary>Price resolved for one service at today's date — for the per-service picker labels.</summary>
-    /// <param name="serviceType">Service to price.</param>
-    private decimal? PriceFor(CylinderServiceType serviceType) =>
-        CylinderPricingEngine.ResolvePrice(serviceType, _pricingRules, DateOnly.FromDateTime(DateTime.Today));
+    /// <summary>Price resolved for one service at today's date — for the per-service picker labels; <c>null</c> for a service without tariff.</summary>
+    /// <param name="service">Service to price.</param>
+    private static decimal? PriceFor(SupplierService service) => service.PriceAt(DateOnly.FromDateTime(DateTime.Today));
 
     /// <summary>Deep link opening this screen on an existing campaign.</summary>
     /// <param name="campaignId">Campaign to open.</param>

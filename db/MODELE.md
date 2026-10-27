@@ -50,8 +50,8 @@ Access CSV ─► [schema.sql + initial_load.sql]      staging (miroir, inchang�
 | 10 | **`item_bouteille.sql`** | **moteur métier Bouteilles : référentiels réglementaire/tarifaire datés, échéances à deux compteurs, bascule automatique — voir `MODELE.md` §10** |
 | 11 | `comptes.sql`       | écran /comptes |
 | 12 | `storage.sql`       | buckets Storage |
+| 12bis | **`fournisseur.sql`**, **`fournisseur_prestation.sql`** (+ `migration_prestations_fournisseur.sql` sur base existante) | **fournisseurs : `ref_fournisseur` (coordonnées, archivage) ; catalogue de prestations par fournisseur, tarifs facultatifs datés, huile/eau distincts ; permissions `fournisseur.*` ; AVANT `campagne.sql` — voir `MODELE.md` §11bis** |
 | 13 | **`campagne.sql`**  | **campagnes de réépreuve : préparation, bordereau, retour groupé, bouteilles manquantes — voir `MODELE.md` §11** |
-| — | **`fournisseur.sql`** | **fournisseurs : `ref_fournisseur` (coordonnées), `ref_fournisseur_prestation`, `ref_fournisseur_tarif` (historique daté, append-only côté UPDATE), amorçage Apragaz ; permissions `fournisseur.*` ; à lancer après `item_bouteille.sql`** |
 | 14 | **`bouteille_evenement.sql`** | **chronologie d'une bouteille : reprise des 412 réépreuves (jointure par ID interne, 3 orphelins traités), requalification, incident — voir `MODELE.md` §12** |
 
 ### Transition / repli
@@ -318,7 +318,9 @@ même contrat des deux côtés (SQL et C#).
 ### 10.2 Référentiels administrables et DATÉS
 
 `public.ref_periodicite_bouteille` (périodicité en mois par type × contrôle)
-et `public.ref_tarif_apragaz` (RR / hydraulique huile / hydraulique eau)
+et les tarifs de prestation (`public.fournisseur_prestation_tarif`, §11bis —
+ils ont **remplacé** l'ancien `public.ref_tarif_apragaz`, supprimé par
+`db/migration_prestations_fournisseur.sql`)
 suivent tous les deux le principe d'historisation **append-only** déjà
 utilisé pour `public.item_transition` (§9.2) : « modifier » une valeur, c'est
 insérer une nouvelle ligne avec un `date_effet` plus récent — rien n'est
@@ -396,11 +398,13 @@ cycle d'envoi groupé chez un prestataire externe (ex. Apragaz).
 `public.campagne` traverse trois statuts fixes (`preparation` → `envoyee` →
 `retournee`, pas un référentiel administrable comme `ref_statut` : ce sont
 trois étapes figées, pas un catalogue). `public.campagne_ligne` porte une
-bouteille par ligne : `type_prestation` (mêmes 3 valeurs que
-`ref_tarif_apragaz.type_prestation`) reste `NULL` jusqu'à saisie explicite —
-**aucun défaut** entre `hydraulique_huile`/`hydraulique_eau`, décision actée
-avec le gestionnaire produit : le coût des deux méthodes diffère réellement
-(§10.2), le choix ne peut pas être deviné.
+bouteille par ligne : `prestation_id` (une prestation du catalogue du
+fournisseur de la campagne, §11bis — optique, ou hydraulique huile / eau) reste
+`NULL` jusqu'à saisie explicite — **aucun défaut** entre huile et eau,
+décision actée avec le gestionnaire produit : le coût des deux méthodes diffère
+réellement, le choix ne peut pas être deviné. Le compteur alimenté au retour
+(optique / hydraulique) vient du `controle_cylindre` de la prestation, plus
+d'un code codé en dur.
 
 Une bouteille ne peut pas être engagée dans deux campagnes actives
 (`preparation`/`envoyee`) simultanément : `tg_campagne_ligne_verifier_unicite_active`
@@ -553,6 +557,42 @@ plutôt que comme le refus déterministe qu'elle est réellement.
 Tests : [`db/tests/campagne_tests.sql`](tests/campagne_tests.sql).
 
 ---
+
+## 11bis. Fournisseurs et prestations ([`db/fournisseur.sql`](fournisseur.sql), [`db/fournisseur_prestation.sql`](fournisseur_prestation.sql))
+
+- `public.ref_fournisseur` — coordonnées (nom unique, contact, téléphone,
+  email, site web, adresse) et archivage (`actif`). Distinct du miroir Access
+  `public.fournisseur`, recréé à chaque rejeu de `schema.sql`. Un fournisseur
+  archivé n'est plus proposé aux campagnes.
+- `public.fournisseur_prestation` — catalogue **par fournisseur** :
+  `controle_cylindre` (`optique` / `hydraulique` / `NULL` = prestation libre) et
+  `methode_hydraulique` (`huile` / `eau`). Contrainte : la méthode est
+  **obligatoire si et seulement si** le contrôle est hydraulique. Huile et eau
+  restent deux prestations distinctes, chacune avec ses tarifs (l'écart réel est
+  une donnée, jamais fusionné ni moyenné), et ne sont jamais choisies par défaut.
+- `public.fournisseur_prestation_tarif` — prix **facultatif**, daté,
+  append-only (jamais d'UPDATE ; un changement de prix = une nouvelle ligne ;
+  suppression d'un prix saisi par erreur réservée à `fournisseur.delete`) ;
+  `public.prestation_tarif(id, date)` remplace `bouteille_tarif_apragaz()`.
+  Une prestation qui a des prix ne se supprime pas (historique protégé).
+- `campagne.fournisseur_id` / `campagne_ligne.prestation_id` : une campagne ne
+  propose que les prestations **actives de contrôle** de son fournisseur ; le
+  fournisseur d'une campagne en préparation peut être changé (les lignes
+  repassent « à choisir ») ; une prestation utilisée en campagne ne peut plus
+  changer de contrôle/méthode ni être supprimée (désactivation à la place).
+- Écritures du catalogue par RPC `SECURITY DEFINER`
+  (`enregistrer_prestation_fournisseur`, `definir_tarif_prestation`,
+  `supprimer_tarif_prestation`, `supprimer_prestation_fournisseur`,
+  `supprimer_fournisseur`) sous les permissions `fournisseur.*` ; coordonnées
+  écrites directement sous RLS.
+- **Migration** (`db/migration_prestations_fournisseur.sql`) : reprend l'ancien
+  catalogue à 3 prestations figées (`ref_fournisseur_prestation` /
+  `ref_fournisseur_tarif`, tous fournisseurs et prix saisis depuis l'écran) ou, à
+  défaut, `ref_tarif_apragaz` ; `rr` → prestation optique, `hydraulique_huile` →
+  hydraulique/huile, `hydraulique_eau` → hydraulique/eau, par fournisseur de la
+  campagne ; garde-fous bloquants (tarifs, mapping par ligne, décomptes
+  huile/eau, tarif en vigueur identique) avant tout `DROP` ; coûts estimés et
+  réels historiques jamais recalculés.
 
 ## 12. Historique des événements d'une bouteille ([`db/bouteille_evenement.sql`](bouteille_evenement.sql))
 

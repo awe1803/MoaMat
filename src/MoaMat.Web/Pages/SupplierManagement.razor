@@ -6,14 +6,19 @@
 <div class="page-head">
     <h1>Fournisseurs</h1>
     <div class="sub">
-        Coordonnées des prestataires, prestations qu'ils proposent (RR, hydraulique eau / huile)
-        et historique de leurs prix.
+        Coordonnées des prestataires, prestations qu'ils proposent (contrôles de bouteille optique ou
+        hydraulique huile / eau, ou prestations libres, avec ou sans prix) et historique de leurs prix.
     </div>
 </div>
 
 @if (_error is not null)
 {
     <p class="msg-error" role="alert">@_error</p>
+}
+
+@if (_notice is not null)
+{
+    <p class="msg-info" role="status">@_notice</p>
 }
 
 <div class="sp-cols">
@@ -164,81 +169,175 @@
                 </AuthorizeView>
             </div>
 
-            @* --- Prestations et prix en vigueur --- *@
+            @* --- Prestations --- *@
             <div class="fiche-panel">
                 <h2 class="section-title">Prestations et prix</h2>
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>Prestation</th>
-                            <th>Proposée</th>
-                            <th>Prix actuel</th>
-                            <th>Prochain prix</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var service in CylinderServiceType.All)
-                        {
-                            var offered = supplier.Services.Contains(service);
-                            var current = CurrentTariff(service);
-                            var upcoming = UpcomingTariff(service);
-                            <tr>
-                                <td>@service.DisplayName</td>
-                                <td>
-                                    <AuthorizeView Policy="@AuthorizationPolicyNames.ManagerOrHigher" Context="manager">
-                                        <Authorized>
-                                            <input type="checkbox" checked="@offered" disabled="@(_isBusy || (offered && HasTariffs(service)))"
-                                                   title="@(offered && HasTariffs(service) ? "Des prix existent : impossible de retirer la prestation." : null)"
-                                                   aria-label="@service.DisplayName proposée"
-                                                   @onchange="e => ToggleServiceAsync(service, (bool)e.Value!)" />
-                                        </Authorized>
-                                        <NotAuthorized>
-                                            @(offered ? "Oui" : "Non")
-                                        </NotAuthorized>
-                                    </AuthorizeView>
-                                </td>
-                                <td>
-                                    @if (current is not null)
-                                    {
-                                        <strong>@FormatPrice(current.PriceEur)</strong>
-                                        <span class="msg-muted"> depuis le @FormatDate(current.EffectiveOn)</span>
-                                    }
-                                    else
-                                    {
-                                        @("—")
-                                    }
-                                </td>
-                                <td>
-                                    @if (upcoming is not null)
-                                    {
-                                        @($"{FormatPrice(upcoming.PriceEur)} le {FormatDate(upcoming.EffectiveOn)}")
-                                    }
-                                    else
-                                    {
-                                        @("—")
-                                    }
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
+
+                @if (_services.Count == 0)
+                {
+                    <p class="data-empty">Aucune prestation pour ce fournisseur.</p>
+                }
+                else
+                {
+                    <div class="table-scroll">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Prestation</th>
+                                    <th>Type</th>
+                                    <th>Prix actuel</th>
+                                    <th>Prochain prix</th>
+                                    <th>État</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var service in _services)
+                                {
+                                    var current = CurrentTariff(service);
+                                    var upcoming = UpcomingTariff(service);
+                                    <tr class="@(service.IsActive ? null : "sp-inactive")">
+                                        <td>
+                                            @service.Name
+                                            @if (!string.IsNullOrWhiteSpace(service.Comment))
+                                            {
+                                                <span class="sp-sub">@service.Comment</span>
+                                            }
+                                        </td>
+                                        <td>@service.ControlLabel</td>
+                                        <td>
+                                            @if (current is not null)
+                                            {
+                                                <strong>@FormatPrice(current.PriceEur)</strong>
+                                                <span class="msg-muted"> depuis le @FormatDate(current.EffectiveOn)</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="msg-muted">sans tarif</span>
+                                            }
+                                        </td>
+                                        <td>
+                                            @if (upcoming is not null)
+                                            {
+                                                @($"{FormatPrice(upcoming.PriceEur)} le {FormatDate(upcoming.EffectiveOn)}")
+                                            }
+                                            else
+                                            {
+                                                @("—")
+                                            }
+                                        </td>
+                                        <td>@(service.IsActive ? "Active" : "Désactivée")</td>
+                                        <td>
+                                            <AuthorizeView Policy="@AuthorizationPolicyNames.ManagerOrHigher" Context="manager">
+                                                <button type="button" class="btn btn-sm" disabled="@_isBusy"
+                                                        @onclick="() => StartEditService(service)">Modifier</button>
+                                                <button type="button" class="btn btn-sm" disabled="@_isBusy"
+                                                        @onclick="() => StartTariff(service)">Prix</button>
+                                                <button type="button" class="btn btn-sm" disabled="@_isBusy"
+                                                        @onclick="() => ToggleServiceActiveAsync(service)">
+                                                    @(service.IsActive ? "Désactiver" : "Réactiver")
+                                                </button>
+                                            </AuthorizeView>
+                                            <AuthorizeView Policy="@AuthorizationPolicyNames.AdministratorOrHigher" Context="admin">
+                                                @if (_pendingDeleteServiceId == service.Id)
+                                                {
+                                                    <span class="msg-muted">Suppression définitive.</span>
+                                                    <button type="button" class="btn btn-sm danger" disabled="@_isBusy"
+                                                            @onclick="() => DeleteServiceAsync(service)">Confirmer</button>
+                                                    <button type="button" class="btn btn-sm" disabled="@_isBusy"
+                                                            @onclick="CancelDeleteService">Annuler</button>
+                                                }
+                                                else
+                                                {
+                                                    <button type="button" class="btn btn-sm danger" disabled="@_isBusy"
+                                                            @onclick="() => RequestDeleteService(service)">Supprimer</button>
+                                                }
+                                            </AuthorizeView>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
 
                 <AuthorizeView Policy="@AuthorizationPolicyNames.ManagerOrHigher" Context="manager">
-                    @if (supplier.Services.Count > 0)
-                    {
+                    <div class="btn-row">
+                        <button type="button" class="btn primary" @onclick="StartNewService" disabled="@_isBusy">
+                            <Icon Name="plus" Size="14" />
+                            Nouvelle prestation
+                        </button>
+                    </div>
+                </AuthorizeView>
+
+                @if (_showServiceForm)
+                {
+                    <form class="sp-tariff-form" @onsubmit="SaveServiceAsync">
+                        <h3 class="sp-subtitle">@(_editingServiceId is null ? "Nouvelle prestation" : "Modifier la prestation")</h3>
+                        <div class="form-grid">
+                            <label class="field">
+                                <span>Libellé *</span>
+                                <input type="text" @bind="_serviceName" required maxlength="160" />
+                            </label>
+                            <label class="field">
+                                <span>Contrôle de bouteille</span>
+                                <select @bind="_serviceControl">
+                                    <option value="">Aucun — prestation libre</option>
+                                    <option value="@nameof(CylinderControl.Optical)">Optique</option>
+                                    <option value="@nameof(CylinderControl.Hydraulic)">Hydraulique</option>
+                                </select>
+                            </label>
+                            @if (IsHydraulicSelected)
+                            {
+                                @* Jamais de valeur par défaut : huile et eau sont deux prestations (et deux prix) distincts. *@
+                                <label class="field">
+                                    <span>Méthode (obligatoire)</span>
+                                    <select @bind="_serviceMethod" required>
+                                        <option value="">— à choisir —</option>
+                                        <option value="@nameof(HydraulicMethod.Oil)">Huile</option>
+                                        <option value="@nameof(HydraulicMethod.Water)">Eau</option>
+                                    </select>
+                                </label>
+                            }
+                            <label class="field field-check">
+                                <input type="checkbox" @bind="_serviceActive" />
+                                <span>Active</span>
+                            </label>
+                        </div>
+                        <label class="field">
+                            <span>Commentaire</span>
+                            <textarea rows="2" @bind="_serviceComment"></textarea>
+                        </label>
+                        <p class="msg-muted">
+                            Le prix est facultatif : il se saisit ensuite avec « Prix ». Le type de contrôle et la
+                            méthode ne peuvent plus changer une fois la prestation utilisée dans une campagne.
+                            Seules les prestations de contrôle (optique / hydraulique) peuvent être choisies dans
+                            une campagne de réépreuve.
+                        </p>
+                        <div class="btn-row">
+                            <button type="submit" class="btn primary" disabled="@_isBusy">Enregistrer</button>
+                            <button type="button" class="btn" @onclick="CloseSubForms" disabled="@_isBusy">Annuler</button>
+                        </div>
+                    </form>
+                }
+
+                <p class="msg-info">
+                    Les prix servent à chiffrer les campagnes de bouteilles du fournisseur : un nouveau prix
+                    s'applique aux prestations choisies après sa date d'effet (les coûts déjà estimés ne sont
+                    pas recalculés).
+                </p>
+            </div>
+
+            @* --- Prix d'une prestation : nouveau prix + historique --- *@
+            @if (TariffService is { } tariffService)
+            {
+                <div class="fiche-panel">
+                    <h2 class="section-title">Prix — @tariffService.Name (@tariffService.ControlLabel)</h2>
+
+                    <AuthorizeView Policy="@AuthorizationPolicyNames.ManagerOrHigher" Context="manager">
                         <form class="sp-tariff-form" @onsubmit="AddTariffAsync">
                             <h3 class="sp-subtitle">Nouveau prix</h3>
                             <div class="form-grid">
-                                <label class="field">
-                                    <span>Prestation</span>
-                                    <select @bind="_tariffService" required>
-                                        <option value="">— à choisir —</option>
-                                        @foreach (var service in supplier.Services)
-                                        {
-                                            <option value="@service.Code">@service.DisplayName</option>
-                                        }
-                                    </select>
-                                </label>
                                 <label class="field">
                                     <span>Prix (€)</span>
                                     <input type="number" step="0.01" min="0" @bind="_tariffPrice" required />
@@ -250,65 +349,51 @@
                             </div>
                             <div class="btn-row">
                                 <button type="submit" class="btn primary" disabled="@_isBusy">Ajouter le prix</button>
+                                <button type="button" class="btn" @onclick="CloseSubForms" disabled="@_isBusy">Fermer</button>
                             </div>
                             <p class="msg-muted">
                                 Un prix n'est jamais modifié : un changement est un nouveau prix avec une
                                 nouvelle date d'effet, l'ancien reste dans l'historique.
                             </p>
                         </form>
+                    </AuthorizeView>
+
+                    <h3 class="sp-subtitle">Historique des prix</h3>
+                    @if (tariffService.Tariffs.Count == 0)
+                    {
+                        <p class="data-empty">Aucun prix enregistré : cette prestation est sans tarif.</p>
                     }
                     else
                     {
-                        <p class="msg-muted">Cocher au moins une prestation pour saisir un prix.</p>
-                    }
-                </AuthorizeView>
-
-                <p class="msg-info">
-                    Les prix du fournisseur « Apragaz » servent à chiffrer les campagnes de bouteilles :
-                    un nouveau prix s'applique aux prestations choisies après sa date d'effet
-                    (les coûts déjà estimés ne sont pas recalculés).
-                </p>
-            </div>
-
-            @* --- Historique --- *@
-            <div class="fiche-panel">
-                <h2 class="section-title">Historique des prix</h2>
-                @if (_tariffs.Count == 0)
-                {
-                    <p class="data-empty">Aucun prix enregistré.</p>
-                }
-                else
-                {
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>À partir du</th>
-                                <th>Prestation</th>
-                                <th>Prix</th>
-                                <th></th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var tariff in _tariffs.OrderByDescending(t => t.EffectiveOn).ThenBy(t => t.Service.Code))
-                            {
+                        <table class="data-table">
+                            <thead>
                                 <tr>
-                                    <td>@FormatDate(tariff.EffectiveOn)</td>
-                                    <td>@tariff.Service.DisplayName</td>
-                                    <td>@FormatPrice(tariff.PriceEur)</td>
-                                    <td>
-                                        <AuthorizeView Policy="@AuthorizationPolicyNames.AdministratorOrHigher" Context="admin">
-                                            <button type="button" class="btn danger btn-sm" title="Supprimer ce prix (saisie erronée)"
-                                                    disabled="@_isBusy" @onclick="() => DeleteTariffAsync(tariff.Id)">
-                                                <Icon Name="close" Size="14" />
-                                            </button>
-                                        </AuthorizeView>
-                                    </td>
+                                    <th>À partir du</th>
+                                    <th>Prix</th>
+                                    <th></th>
                                 </tr>
-                            }
-                        </tbody>
-                    </table>
-                }
-            </div>
+                            </thead>
+                            <tbody>
+                                @foreach (var tariff in tariffService.Tariffs.OrderByDescending(t => t.EffectiveOn))
+                                {
+                                    <tr>
+                                        <td>@FormatDate(tariff.EffectiveOn)</td>
+                                        <td>@FormatPrice(tariff.PriceEur)</td>
+                                        <td>
+                                            <AuthorizeView Policy="@AuthorizationPolicyNames.AdministratorOrHigher" Context="admin">
+                                                <button type="button" class="btn danger btn-sm" title="Supprimer ce prix (saisie erronée)"
+                                                        disabled="@_isBusy" @onclick="() => DeleteTariffAsync(tariff.Id)">
+                                                    <Icon Name="close" Size="14" />
+                                                </button>
+                                            </AuthorizeView>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                </div>
+            }
         }
         else
         {

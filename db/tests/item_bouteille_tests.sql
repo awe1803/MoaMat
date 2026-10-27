@@ -21,7 +21,7 @@
 --    4. Bascule automatique en hors_validite dès dépassement d'échéance
 --       (R2.3), journalisée comme une transition normale ; en_maintenance et
 --       en_controle sont exclus (workflow actif non interrompu).
---    5. Référentiels réglementaire/tarifaire : admin peut INSÉRER une valeur
+--    5. Référentiel réglementaire : admin peut INSÉRER une valeur
 --       datée, mais UPDATE/DELETE sont refusés même pour un admin
 --       (historisation append-only).
 -- =============================================================================
@@ -385,25 +385,9 @@ select moamat_test.expect_write_denied(
     'referentiel reglementaire — DELETE sans effet pour un admin (aucune policy DELETE)',
     $q$ delete from public.ref_periodicite_bouteille where type_bouteille = 'plongee_acier' and type_controle = 'optique' $q$);
 
-insert into public.ref_tarif_apragaz (type_prestation, prix_eur, date_effet)
-values ('rr', 22.00, date '2027-01-01');
-
-select moamat_test.expect(
-    'referentiel tarifaire — admin peut inserer un tarif date',
-    (select count(*) from public.ref_tarif_apragaz where type_prestation = 'rr' and date_effet = date '2027-01-01') = 1);
-
-select moamat_test.expect(
-    'referentiel tarifaire — huile et eau restent deux lignes distinctes (ecart constate, jamais fusionnees)',
-    (select count(distinct prix_eur) from public.ref_tarif_apragaz
-     where type_prestation in ('hydraulique_huile', 'hydraulique_eau') and date_effet = date '2023-01-01') = 2);
-
-select moamat_test.expect_write_denied(
-    'referentiel tarifaire — UPDATE sans effet pour un admin (aucune policy UPDATE)',
-    $q$ update public.ref_tarif_apragaz set prix_eur = 0 where type_prestation = 'rr' and date_effet = date '2023-01-01' $q$);
-
-select moamat_test.expect_write_denied(
-    'referentiel tarifaire — DELETE sans effet pour un admin (aucune policy DELETE)',
-    $q$ delete from public.ref_tarif_apragaz where type_prestation = 'rr' and date_effet = date '2023-01-01' $q$);
+-- (Référentiel tarifaire Apragaz : remplacé par le catalogue de prestations par
+-- fournisseur — tarifs datés append-only testés dans
+-- db/tests/fournisseur_prestation_tests.sql.)
 
 reset role;
 
@@ -420,13 +404,6 @@ select moamat_test.expect_raises(
     'referentiel reglementaire — trigger append-only refuse le DELETE meme pour "postgres"',
     $q$ delete from public.ref_periodicite_bouteille where type_bouteille = 'plongee_acier' and type_controle = 'optique' $q$);
 
-select moamat_test.expect_raises(
-    'referentiel tarifaire — trigger append-only refuse l''UPDATE meme pour "postgres"',
-    $q$ update public.ref_tarif_apragaz set prix_eur = 0 where type_prestation = 'rr' and date_effet = date '2023-01-01' $q$);
-
-select moamat_test.expect_raises(
-    'referentiel tarifaire — trigger append-only refuse le DELETE meme pour "postgres"',
-    $q$ delete from public.ref_tarif_apragaz where type_prestation = 'rr' and date_effet = date '2023-01-01' $q$);
 
 -- =============================================================================
 --  Fin

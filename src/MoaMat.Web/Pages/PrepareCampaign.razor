@@ -2,7 +2,6 @@
 @attribute [Microsoft.AspNetCore.Authorization.Authorize]
 @using MoaMat.Domain.Accounts
 @using MoaMat.Domain.Campaigns
-@using MoaMat.Domain.Cylinders
 @using MoaMat.Domain.Inventory
 @using MoaMat.Web.Presentation
 
@@ -94,9 +93,15 @@
 
             <div class="toolbar">
                 <label>
-                    Prestataire
-                    <input type="text" @bind="_provider" />
+                    Fournisseur
+                    <select @bind="_provider" disabled="@(_suppliers.Count == 0)">
+                        @foreach (var supplier in _suppliers)
+                        {
+                            <option value="@supplier.Name">@supplier.Name</option>
+                        }
+                    </select>
                 </label>
+                <a class="btn btn-sm" href="fournisseurs">Gérer les fournisseurs et prestations</a>
                 <button type="button" class="btn" @onclick="CreateCampaignAsync"
                         disabled="@(_selectedItemIds.Count == 0 || _isSubmitting)">
                     Créer la campagne (@_selectedItemIds.Count sélectionnée(s))
@@ -151,6 +156,23 @@
                 </div>
             </div>
 
+            <div class="toolbar">
+                <label>
+                    Fournisseur
+                    <select value="@_campaign.SupplierId"
+                            @onchange="e => ChangeSupplierAsync(e.Value as string)"
+                            disabled="@_isSubmitting">
+                        @foreach (var supplier in _suppliers)
+                        {
+                            <option value="@supplier.Id">@supplier.Name</option>
+                        }
+                    </select>
+                </label>
+                <span class="msg-muted">
+                    Changer de fournisseur remet les prestations de toutes les bouteilles à choisir.
+                </span>
+            </div>
+
             <div class="table-scroll">
                 <table class="data-table">
                     <thead>
@@ -166,24 +188,33 @@
                             <tr>
                                 <td>@(line.ItemClubCode ?? "—")</td>
                                 <td>
-                                    <select value="@(line.ServiceType?.Code ?? string.Empty)"
-                                            @onchange="e => SetLineServiceTypeAsync(line, e.Value as string)"
+                                    @* Jamais de présélection : huile / eau se choisissent explicitement, par bouteille. *@
+                                    <select value="@(line.Service?.Id.ToString() ?? string.Empty)"
+                                            @onchange="e => SetLineServiceAsync(line, e.Value as string)"
                                             disabled="@_isSubmitting"
                                             aria-label="@($"Prestation pour {line.ItemClubCode}")">
                                         <option value="" disabled>— à choisir —</option>
-                                        @foreach (var service in CylinderServiceType.All)
+                                        @foreach (var service in _services)
                                         {
-                                            <option value="@service.Code">
-                                                @service.DisplayName
+                                            <option value="@service.Id">
+                                                @service.Name — @service.ControlLabel
                                                 @if (PriceFor(service) is { } price)
                                                 {
                                                     <text> (@price.ToString("0.00") €)</text>
+                                                }
+                                                else
+                                                {
+                                                    <text> (sans tarif)</text>
+                                                }
+                                                @if (!service.IsActive)
+                                                {
+                                                    <text> [désactivée]</text>
                                                 }
                                             </option>
                                         }
                                     </select>
                                 </td>
-                                <td class="mono">@(line.EstimatedCostEur?.ToString("0.00") + " €" ?? "—")</td>
+                                <td class="mono">@(line.EstimatedCostEur is { } estimate ? estimate.ToString("0.00") + " €" : "—")</td>
                             </tr>
                         }
                     </tbody>
