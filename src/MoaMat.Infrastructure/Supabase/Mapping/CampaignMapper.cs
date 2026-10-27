@@ -44,7 +44,7 @@ internal static class CampaignMapper
     };
 
     /// <summary>Converts one pricing referential row.</summary>
-    /// <param name="record">PostgREST row of <c>public.ref_tarif_apragaz</c>.</param>
+    /// <param name="record">PostgREST row of <c>public.v_tarif_campagne</c>.</param>
     public static CylinderPricingRule? ToDomain(CylinderPricingRuleRecord record)
     {
         var serviceType = CylinderServiceType.FromCode(record.TypePrestation);

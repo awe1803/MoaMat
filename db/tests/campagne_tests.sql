@@ -9,7 +9,7 @@
 --  Pré-requis : avoir exécuté, dans l'ordre,
 --      db/schema.sql, db/initial_load.sql, db/roles.sql, db/permissions.sql,
 --      db/model_item.sql, db/transform_item.sql, db/rls.sql, db/audit.sql,
---      db/item_etat.sql, db/item_bouteille.sql, db/campagne.sql
+--      db/item_etat.sql, db/item_bouteille.sql, db/fournisseur.sql, db/campagne.sql
 --  puis lancer CE fichier avec un rôle non restreint (« postgres ») :
 --      psql "$SUPABASE_DB_URL" -f db/tests/campagne_tests.sql
 --

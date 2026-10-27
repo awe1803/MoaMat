@@ -1,0 +1,90 @@
+/* Two columns: supplier list, then the selected supplier's sheet.
+   All colors come from the app.css tokens, so dark mode follows along. */
+
+.sp-cols {
+    display: flex;
+    gap: 18px;
+    flex-wrap: wrap;
+    align-items: flex-start;
+}
+
+.sp-list-col {
+    flex: 1 1 260px;
+    min-width: 260px;
+}
+
+.sp-detail-col {
+    flex: 3 1 420px;
+    min-width: 0;
+}
+
+.sp-row {
+    gap: 6px;
+    padding: 4px 12px;
+}
+
+.sp-row.sp-sel {
+    background: var(--teal-light);
+}
+
+.sp-pick {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 8px 0;
+    background: none;
+    border: none;
+    color: var(--ink);
+    font-family: inherit;
+    font-size: 13px;
+    text-align: left;
+}
+
+.sp-row.sp-sel .sp-name {
+    color: var(--teal-dark);
+    font-weight: 500;
+}
+
+.sp-sub {
+    font-size: 12px;
+    color: var(--ink-3);
+}
+
+.sp-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.sp-contact {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 6px 16px;
+    margin: 0;
+    font-size: 13px;
+}
+
+.sp-contact dt {
+    color: var(--ink-3);
+}
+
+.sp-contact dd {
+    margin: 0;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.sp-tariff-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+}
+
+.sp-subtitle {
+    margin: 0;
+    font-size: 13px;
+}
