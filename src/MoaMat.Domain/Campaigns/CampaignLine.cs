@@ -1,5 +1,3 @@
-using MoaMat.Domain.Cylinders;
-
 namespace MoaMat.Domain.Campaigns;
 
 /// <summary>
@@ -21,13 +19,17 @@ public sealed record CampaignLine
     public string? ItemClubCode { get; init; }
 
     /// <summary>
-    /// Service billed for this bottle. <c>null</c> until the manager picks it
-    /// — mandatory before the campaign can be sent (no default between the two
-    /// hydraulic methods, see <c>db/campagne.sql</c>).
+    /// Service billed for this bottle, from the campaign supplier's catalogue.
+    /// <c>null</c> until the manager picks it — mandatory before the campaign
+    /// can be sent (no default between the two hydraulic methods, oil and
+    /// water, see <c>db/campagne.sql</c>).
     /// </summary>
-    public CylinderServiceType? ServiceType { get; init; }
+    public CampaignService? Service { get; init; }
 
-    /// <summary>Cost estimated at preparation time, resolved via <see cref="CylinderPricingEngine"/>.</summary>
+    /// <summary>
+    /// Cost estimated at preparation time by the database from the service's
+    /// tariff in force; <c>null</c> when the service has no tariff.
+    /// </summary>
     public decimal? EstimatedCostEur { get; init; }
 
     /// <summary>Actual cost, entered when the return is pointed.</summary>

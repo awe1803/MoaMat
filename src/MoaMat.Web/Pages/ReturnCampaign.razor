@@ -162,7 +162,7 @@
                                         </span>
                                     }
                                 </td>
-                                <td>@(line.ServiceType?.DisplayName ?? "—")</td>
+                                <td>@(line.Service is { } service ? $"{service.Name} — {service.ControlLabel}" : "—")</td>
                                 <td>
                                     <select value="@(_outcomes.GetValueOrDefault(line.Id)?.ToString() ?? string.Empty)"
                                             disabled="@rowDisabled"

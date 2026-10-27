@@ -9,7 +9,7 @@
 --  Pré-requis : avoir exécuté, dans l'ordre,
 --      db/schema.sql, db/initial_load.sql, db/roles.sql, db/permissions.sql,
 --      db/model_item.sql, db/transform_item.sql, db/rls.sql, db/audit.sql,
---      db/item_etat.sql, db/item_bouteille.sql, db/fournisseur.sql, db/campagne.sql
+--      db/item_etat.sql, db/item_bouteille.sql, db/fournisseur.sql, db/fournisseur_prestation.sql, db/campagne.sql
 --  puis lancer CE fichier avec un rôle non restreint (« postgres ») :
 --      psql "$SUPABASE_DB_URL" -f db/tests/campagne_tests.sql
 --
@@ -80,6 +80,16 @@ exception
         end if;
         raise notice 'PASS: % (erreur levee: %)', p_label, sqlerrm;
 end $$;
+
+-- Id de la prestation Apragaz portant l'ancien code ('rr', 'hydraulique_huile',
+-- 'hydraulique_eau') — le catalogue par fournisseur (db/fournisseur_prestation.sql)
+-- remplace le type_prestation texte ; huile et eau y restent deux prestations
+-- distinctes.
+create function moamat_test.presta(p_code text)
+returns bigint language sql stable as $$
+    select p.id from public.fournisseur_prestation p
+    where p.fournisseur_id = public.resoudre_fournisseur('Apragaz') and p.code = p_code
+$$;
 
 grant execute on all functions in schema moamat_test to authenticated, anon;
 
@@ -167,7 +177,7 @@ select moamat_test.expect(
 select moamat_test.expect(
     'creation — prestation non renseignee par defaut',
     (select count(*) from public.campagne_ligne
-     where campagne_id = (select id from moamat_test.t_campagne) and type_prestation is not null) = 0);
+     where campagne_id = (select id from moamat_test.t_campagne) and prestation_id is not null) = 0);
 
 -- Doublons dans le tableau d'entrée : dédoublonnés, une seule ligne créée
 -- (et pas une "unique_violation" opaque en cours de boucle).
@@ -235,11 +245,11 @@ declare
 begin
     select id into v_ligne_id from public.campagne_ligne
         where campagne_id = (select id from moamat_test.t_campagne) and item_id = 999200001;
-    perform public.definir_prestation_campagne_ligne(v_ligne_id, 'rr');
+    perform public.definir_prestation_campagne_ligne(v_ligne_id, moamat_test.presta('rr'));
 
     select id into v_ligne_id from public.campagne_ligne
         where campagne_id = (select id from moamat_test.t_campagne) and item_id = 999200002;
-    perform public.definir_prestation_campagne_ligne(v_ligne_id, 'hydraulique_eau');
+    perform public.definir_prestation_campagne_ligne(v_ligne_id, moamat_test.presta('hydraulique_eau'));
 end $$;
 
 select moamat_test.expect(
@@ -284,7 +294,7 @@ begin
 
     select id into v_ligne_id from public.campagne_ligne
         where campagne_id = v_campagne_id and item_id = 999200011;
-    perform public.definir_prestation_campagne_ligne(v_ligne_id, 'rr');
+    perform public.definir_prestation_campagne_ligne(v_ligne_id, moamat_test.presta('rr'));
 
     -- Numéro de bon absent (NULL) : accepté — certains prestataires
     -- (ex. Apragaz) ne le communiquent qu'à la remise physique des bouteilles.
@@ -383,7 +393,7 @@ begin
         where campagne_id = v_campagne_id and item_id = 999200006;
     insert into moamat_test.t_ligne5 values (v_ligne_id);
 
-    perform public.definir_prestation_campagne_ligne(v_ligne_id, 'rr');
+    perform public.definir_prestation_campagne_ligne(v_ligne_id, moamat_test.presta('rr'));
     perform public.envoyer_campagne(v_campagne_id, 'BON-TEST-5', current_date);
 end $$;
 
@@ -530,7 +540,7 @@ begin
 
     select id into v_ligne_id from public.campagne_ligne
         where campagne_id = v_campagne_id and item_id = 999200007;
-    perform public.definir_prestation_campagne_ligne(v_ligne_id, 'rr');
+    perform public.definir_prestation_campagne_ligne(v_ligne_id, moamat_test.presta('rr'));
     perform public.envoyer_campagne(v_campagne_id, 'BON-TEST-6', current_date);
 end $$;
 
@@ -596,7 +606,7 @@ begin
         where campagne_id = v_campagne_id and item_id = 999200008;
     insert into moamat_test.t_ligne7 values (v_ligne_id);
 
-    perform public.definir_prestation_campagne_ligne(v_ligne_id, 'hydraulique_eau');
+    perform public.definir_prestation_campagne_ligne(v_ligne_id, moamat_test.presta('hydraulique_eau'));
     perform public.envoyer_campagne(v_campagne_id, 'BON-TEST-7', current_date);
 end $$;
 
@@ -658,7 +668,7 @@ begin
 
     select id into v_ligne_id from public.campagne_ligne
         where campagne_id = v_campagne_id and item_id = 999200009;
-    perform public.definir_prestation_campagne_ligne(v_ligne_id, 'rr');
+    perform public.definir_prestation_campagne_ligne(v_ligne_id, moamat_test.presta('rr'));
 end $$;
 
 -- Déclassée APRÈS avoir été ajoutée à la campagne (encore "preparation") —

@@ -6,12 +6,14 @@
 -- =============================================================================
 --
 --  À exécuter APRÈS db/model_item.sql, db/transform_item.sql, db/rls.sql,
---  db/audit.sql, db/item_etat.sql et db/item_bouteille.sql (a besoin de
---  public.item, public.item_bouteille, public.has_permission,
+--  db/audit.sql, db/item_etat.sql, db/item_bouteille.sql et
+--  db/fournisseur_prestation.sql (a besoin de public.item,
+--  public.item_bouteille, public.has_permission, public.ref_fournisseur,
+--  public.fournisseur_prestation, public.prestation_tarif,
+--  public.resoudre_fournisseur et du trigger
 --  public.tg_item_valider_transition_statut). Ré-exécutable sans erreur.
---  Le chiffrage d'une prestation appelle public.campagne_tarif_prestation()
---  (db/fournisseur.sql, résolue à l'appel) : exécuter db/fournisseur.sql
---  avant d'utiliser les campagnes.
+--  Base existante (ancien modèle type_prestation) : exécuter AUSSI
+--  db/migration_prestations_fournisseur.sql AVANT ce fichier.
 --
 --  Fusion des tickets « entité Campagne » + « écran préparation » +
 --  « écran retour ». Toutes les écritures passent par des fonctions
@@ -105,6 +107,9 @@ begin;
 create table if not exists public.campagne (
     id          bigint generated always as identity primary key,
     prestataire text not null,
+    -- Fournisseur dont le catalogue de prestations (public.fournisseur_prestation)
+    -- alimente les lignes de la campagne ; prestataire reste le libellé saisi.
+    fournisseur_id bigint not null references public.ref_fournisseur (id),
     statut      text not null default 'preparation'
                 check (statut in ('preparation', 'envoyee', 'retournee')),
     numero_bon  text,
@@ -128,10 +133,12 @@ create table if not exists public.campagne_ligne (
     id                bigint generated always as identity primary key,
     campagne_id       bigint not null references public.campagne (id) on delete cascade,
     item_id           bigint not null references public.item (id),
-    -- Mêmes 3 valeurs que public.ref_tarif_apragaz.type_prestation
-    -- (db/item_bouteille.sql). NULL jusqu'à saisie explicite (Q hydraulique
-    -- huile/eau ci-dessus) : jamais de valeur par défaut.
-    type_prestation   text check (type_prestation in ('rr', 'hydraulique_huile', 'hydraulique_eau')),
+    -- Prestation du catalogue du fournisseur de la campagne
+    -- (db/fournisseur_prestation.sql) : porte le type de contrôle (optique /
+    -- hydraulique) ET la méthode huile / eau. NULL jusqu'à saisie explicite
+    -- (huile/eau jamais choisie par défaut) : jamais de valeur par défaut.
+    -- FK restrictive : une prestation utilisée se désactive, ne se supprime pas.
+    prestation_id     bigint references public.fournisseur_prestation (id),
     cout_estime_eur   numeric(12,2),
     cout_reel_eur     numeric(12,2),
     num_certificat    text,
@@ -241,6 +248,7 @@ declare
     v_item_id     bigint;
     v_invalides   bigint[];
     v_inadmissibles bigint[];
+    v_fournisseur_id bigint;
 begin
     if not public.has_permission('campagne.create') then
         raise exception 'Droit insuffisant : permission « campagne.create » requise.'
@@ -249,6 +257,21 @@ begin
 
     if p_prestataire is null or btrim(p_prestataire) = '' then
         raise exception 'Prestataire obligatoire.' using errcode = 'check_violation';
+    end if;
+
+    -- Le prestataire doit être un fournisseur connu (écran Fournisseurs) : ses
+    -- prestations alimentent les lignes. Jamais créé implicitement ici — une
+    -- faute de frappe ne doit pas fabriquer un fournisseur fantôme.
+    v_fournisseur_id := public.resoudre_fournisseur(p_prestataire);
+
+    if v_fournisseur_id is null then
+        raise exception 'Fournisseur inconnu : « % ». Créez-le d''abord dans l''écran Fournisseurs.', btrim(p_prestataire)
+            using errcode = 'check_violation';
+    end if;
+
+    if not (select actif from public.ref_fournisseur where id = v_fournisseur_id) then
+        raise exception 'Le fournisseur « % » est archivé : réactivez-le avant de l''utiliser dans une campagne.', btrim(p_prestataire)
+            using errcode = 'check_violation';
     end if;
 
     if p_item_ids is null or array_length(p_item_ids, 1) is null then
@@ -327,7 +350,7 @@ begin
             using errcode = 'check_violation';
     end if;
 
-    insert into public.campagne (prestataire) values (p_prestataire)
+    insert into public.campagne (prestataire, fournisseur_id) values (p_prestataire, v_fournisseur_id)
         returning id into v_campagne_id;
 
     foreach v_item_id in array p_item_ids loop
@@ -339,7 +362,7 @@ begin
         'campagne',
         v_campagne_id::text,
         null,
-        jsonb_build_object('prestataire', p_prestataire, 'item_ids', p_item_ids),
+        jsonb_build_object('prestataire', p_prestataire, 'fournisseur_id', v_fournisseur_id, 'item_ids', p_item_ids),
         '{}'::jsonb);
 
     return v_campagne_id;
@@ -356,14 +379,22 @@ grant execute on function public.creer_campagne(text, bigint[]) to authenticated
 --     Calcule au passage le coût estimé via le référentiel tarifaire courant.
 -- -----------------------------------------------------------------------------
 
-create or replace function public.definir_prestation_campagne_ligne(p_ligne_id bigint, p_type_prestation text)
+-- Ancienne signature (type_prestation texte) : retirée explicitement, sans quoi
+-- elle subsisterait à côté de la nouvelle (surcharge) sur une base migrée.
+drop function if exists public.definir_prestation_campagne_ligne(bigint, text);
+
+create or replace function public.definir_prestation_campagne_ligne(p_ligne_id bigint, p_prestation_id bigint)
 returns void
 language plpgsql
 security definer
 set search_path = ''
 as $$
 declare
-    v_statut text;
+    v_statut         text;
+    v_fournisseur_id bigint;
+    v_p_fournisseur  bigint;
+    v_p_actif        boolean;
+    v_p_controle     text;
 begin
     if not public.has_permission('campagne.update') then
         raise exception 'Droit insuffisant : permission « campagne.update » requise.'
@@ -377,7 +408,7 @@ begin
     -- sans quoi une saisie de prestation pourrait s'intercaler entre le
     -- comptage des lignes sans prestation et le passage effectif au statut
     -- "envoyee", laissant une incertitude sur l'état réellement envoyé.
-    select c.statut into v_statut
+    select c.statut, c.fournisseur_id into v_statut, v_fournisseur_id
     from public.campagne_ligne l
     join public.campagne c on c.id = l.campagne_id
     where l.id = p_ligne_id
@@ -392,17 +423,120 @@ begin
             using errcode = 'check_violation';
     end if;
 
+    -- La prestation doit appartenir au fournisseur de la campagne, être
+    -- active et porter un type de contrôle (une prestation libre n'a pas de
+    -- sens pour une bouteille : elle n'alimenterait aucun compteur).
+    select p.fournisseur_id, p.actif, p.controle_cylindre
+    into v_p_fournisseur, v_p_actif, v_p_controle
+    from public.fournisseur_prestation p
+    where p.id = p_prestation_id;
+
+    if v_p_fournisseur is null then
+        raise exception 'Prestation introuvable : %.', p_prestation_id using errcode = 'no_data_found';
+    end if;
+
+    if v_p_fournisseur <> v_fournisseur_id then
+        raise exception 'Cette prestation n''appartient pas au fournisseur de la campagne.'
+            using errcode = 'check_violation';
+    end if;
+
+    if not v_p_actif then
+        raise exception 'Cette prestation est désactivée.' using errcode = 'check_violation';
+    end if;
+
+    if v_p_controle is null then
+        raise exception 'Cette prestation n''est pas une prestation de contrôle de bouteille (optique / hydraulique).'
+            using errcode = 'check_violation';
+    end if;
+
+    -- cout_estime_eur NULL si la prestation n'a (encore) aucun tarif : le coût
+    -- réel est saisi au retour comme pour toute ligne.
     update public.campagne_ligne
-    set type_prestation = p_type_prestation,
-        cout_estime_eur = public.campagne_tarif_prestation(p_type_prestation, current_date)
+    set prestation_id = p_prestation_id,
+        cout_estime_eur = public.prestation_tarif(p_prestation_id, current_date)
     where id = p_ligne_id;
 end $$;
 
-comment on function public.definir_prestation_campagne_ligne(bigint, text) is
-    'Renseigne la prestation (rr / hydraulique_huile / hydraulique_eau) d''une ligne de campagne encore en préparation et recalcule son coût estimé via public.campagne_tarif_prestation() (prix du fournisseur Apragaz, db/fournisseur.sql). Exige "campagne.update".';
+comment on function public.definir_prestation_campagne_ligne(bigint, bigint) is
+    'Renseigne la prestation (catalogue du fournisseur de la campagne : contrôle optique, ou hydraulique huile / eau) d''une ligne encore en préparation et recalcule son coût estimé via public.prestation_tarif() (NULL si pas de tarif). Refuse une prestation d''un autre fournisseur, désactivée ou sans type de contrôle. Exige "campagne.update".';
 
-revoke execute on function public.definir_prestation_campagne_ligne(bigint, text) from public;
-grant execute on function public.definir_prestation_campagne_ligne(bigint, text) to authenticated;
+revoke execute on function public.definir_prestation_campagne_ligne(bigint, bigint) from public;
+grant execute on function public.definir_prestation_campagne_ligne(bigint, bigint) to authenticated;
+
+-- -----------------------------------------------------------------------------
+--  4bis. Changement de fournisseur d'une campagne encore en préparation.
+--     Les prestations appartiennent à UN fournisseur : changer de fournisseur
+--     remet donc toutes les lignes à « prestation à choisir » (et leur coût
+--     estimé à NULL) — jamais de prestation d'un autre fournisseur conservée.
+-- -----------------------------------------------------------------------------
+
+create or replace function public.definir_fournisseur_campagne(p_campagne_id bigint, p_fournisseur_id bigint)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+    v_statut text;
+    v_ancien bigint;
+    v_nom    text;
+    v_actif  boolean;
+begin
+    if not public.has_permission('campagne.update') then
+        raise exception 'Droit insuffisant : permission « campagne.update » requise.'
+            using errcode = 'insufficient_privilege';
+    end if;
+
+    -- Même verrou que definir_prestation_campagne_ligne / envoyer_campagne.
+    select statut, fournisseur_id into v_statut, v_ancien
+    from public.campagne where id = p_campagne_id for update;
+
+    if v_statut is null then
+        raise exception 'Campagne introuvable : %.', p_campagne_id using errcode = 'no_data_found';
+    end if;
+
+    if v_statut <> 'preparation' then
+        raise exception 'Le fournisseur ne peut être modifié que pendant la préparation.'
+            using errcode = 'check_violation';
+    end if;
+
+    select nom, actif into v_nom, v_actif from public.ref_fournisseur where id = p_fournisseur_id;
+
+    if not found then
+        raise exception 'Fournisseur introuvable : %.', p_fournisseur_id using errcode = 'no_data_found';
+    end if;
+
+    if not v_actif then
+        raise exception 'Ce fournisseur est archivé : réactivez-le avant de l''utiliser dans une campagne.'
+            using errcode = 'check_violation';
+    end if;
+
+    if v_ancien = p_fournisseur_id then
+        return;
+    end if;
+
+    update public.campagne
+    set fournisseur_id = p_fournisseur_id, prestataire = v_nom, modifie_le = now()
+    where id = p_campagne_id;
+
+    update public.campagne_ligne
+    set prestation_id = null, cout_estime_eur = null
+    where campagne_id = p_campagne_id;
+
+    perform public.audit_write(
+        'campagne.fournisseur_modifie',
+        'campagne',
+        p_campagne_id::text,
+        jsonb_build_object('fournisseur_id', v_ancien),
+        jsonb_build_object('fournisseur_id', p_fournisseur_id, 'prestataire', v_nom),
+        '{}'::jsonb);
+end $$;
+
+comment on function public.definir_fournisseur_campagne(bigint, bigint) is
+    'Change le fournisseur d''une campagne encore en préparation et remet toutes ses lignes à « prestation à choisir » (prestation_id et cout_estime_eur NULL) : les prestations sont propres à chaque fournisseur. No-op si le fournisseur est inchangé. Verrouille la campagne ("for update"). Exige "campagne.update". Journalisé (campagne.fournisseur_modifie).';
+
+revoke execute on function public.definir_fournisseur_campagne(bigint, bigint) from public;
+grant execute on function public.definir_fournisseur_campagne(bigint, bigint) to authenticated;
 
 -- -----------------------------------------------------------------------------
 --  5. Envoi — génère le bordereau, bascule les bouteilles en "En contrôle".
@@ -460,7 +594,7 @@ begin
 
     select count(*) into v_lignes_sans_prestation
     from public.campagne_ligne
-    where campagne_id = p_campagne_id and type_prestation is null;
+    where campagne_id = p_campagne_id and prestation_id is null;
 
     if v_lignes_sans_prestation > 0 then
         raise exception 'Envoi refusé : % bouteille(s) sans prestation choisie.', v_lignes_sans_prestation
@@ -598,7 +732,7 @@ declare
     v_ligne            jsonb;
     v_ligne_id         bigint;
     v_item_id          bigint;
-    v_type_prestation  text;
+    v_controle         text;
     v_date_retour_ligne date;
     v_cout_reel        numeric;
     v_resultat         text;
@@ -680,9 +814,10 @@ begin
         -- nothing, silently updating the wrong bottle's counter instead of
         -- reporting the unknown line.
         begin
-            select l.item_id, l.type_prestation, l.date_retour_ligne, l.cout_reel_eur, l.num_certificat, l.resultat
-            into strict v_item_id, v_type_prestation, v_existant_date, v_existant_cout, v_existant_certif, v_existant_resultat
+            select l.item_id, p.controle_cylindre, l.date_retour_ligne, l.cout_reel_eur, l.num_certificat, l.resultat
+            into strict v_item_id, v_controle, v_existant_date, v_existant_cout, v_existant_certif, v_existant_resultat
             from public.campagne_ligne l
+            left join public.fournisseur_prestation p on p.id = l.prestation_id
             where l.id = v_ligne_id and l.campagne_id = p_campagne_id;
         exception
             when no_data_found then
@@ -750,11 +885,19 @@ begin
             continue;
         end if;
 
-        -- Un compteur = un contrôle : "rr" alimente le compteur optique,
-        -- les deux méthodes hydrauliques alimentent le même compteur
-        -- hydraulique (public.tg_item_bouteille_sync_echeance recalcule
-        -- ensuite l'échéance automatiquement).
-        if v_type_prestation = 'rr' then
+        -- Un compteur = un contrôle : une prestation « optique » alimente le
+        -- compteur optique, les deux méthodes hydrauliques (huile / eau)
+        -- alimentent le même compteur hydraulique
+        -- (public.tg_item_bouteille_sync_echeance recalcule ensuite
+        -- l'échéance automatiquement). Un envoi exige une prestation
+        -- (envoyer_campagne) : un contrôle NULL ici est une incohérence, pas
+        -- un cas à traiter par défaut en hydraulique.
+        if v_controle is null then
+            raise exception 'Ligne % sans prestation de contrôle : pointage impossible.', v_ligne_id
+                using errcode = 'check_violation';
+        end if;
+
+        if v_controle = 'optique' then
             update public.item_bouteille
             set date_dernier_controle_optique = v_date_retour_ligne
             where item_id = v_item_id;
@@ -909,14 +1052,18 @@ create view public.v_campagne_ligne
         l.campagne_id,
         l.item_id,
         i.code_club as item_code_club,
-        l.type_prestation,
+        l.prestation_id,
+        p.libelle as prestation_libelle,
+        p.controle_cylindre,
+        p.methode_hydraulique,
         l.cout_estime_eur,
         l.cout_reel_eur,
         l.num_certificat,
         l.resultat,
         l.date_retour_ligne
     from public.campagne_ligne l
-    join public.item i on i.id = l.item_id;
+    join public.item i on i.id = l.item_id
+    left join public.fournisseur_prestation p on p.id = l.prestation_id;
 
 comment on view public.v_campagne_ligne is
     'Lecture des lignes de campagne avec le code club de la bouteille résolu. security_invoker : RLS de campagne_ligne et item appliquée.';

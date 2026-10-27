@@ -25,7 +25,7 @@
 --       -> l'un des 6 codes réglementaires.
 --    3. public.ref_periodicite_bouteille — référentiel réglementaire
 --       administrable et DATÉ (append-only, comme public.item_transition).
---    4. public.ref_tarif_apragaz — référentiel tarifaire, même mécanique.
+--    4. (retiré) référentiel tarifaire Apragaz -> db/fournisseur_prestation.sql.
 --    5. public.bouteille_echeance() — moteur : un compteur = une échéance,
 --       aucune alternance codée en dur entre optique et hydraulique.
 --    6. public.v_item_bouteille — vue de lecture (échéances calculées).
@@ -197,66 +197,12 @@ comment on function public.bouteille_periodicite_mois(text, text, date) is
     'Périodicité (mois) en vigueur à p_a_la_date pour (type_bouteille, type_controle). NULL si ce contrôle ne s''applique pas à ce type.';
 
 -- -----------------------------------------------------------------------------
---  4. Référentiel tarifaire Apragaz — même mécanique d'historisation.
---     Repris de public.ref_tarif_requalification (RR / hydraulique huile /
---     hydraulique eau, 2023-2026). Huile et eau restent deux lignes DISTINCTES
---     à dessein : l'écart entre les deux (de l'ordre de 13 à 15 € selon les
---     années, cf. les valeurs ci-dessous) est une donnée réelle du référentiel
---     Apragaz, pas une erreur de saisie à corriger — ne jamais les fusionner
---     ni les moyenner.
+--  4. (Retiré) Le référentiel tarifaire Apragaz (public.ref_tarif_apragaz) a
+--     été remplacé par le catalogue de prestations par fournisseur
+--     (db/fournisseur_prestation.sql : public.fournisseur_prestation_tarif,
+--     public.prestation_tarif()). Migration des bases existantes :
+--     db/migration_prestations_fournisseur.sql.
 -- -----------------------------------------------------------------------------
-
-create table if not exists public.ref_tarif_apragaz (
-    id              bigint generated always as identity primary key,
-    type_prestation text not null check (type_prestation in ('rr', 'hydraulique_huile', 'hydraulique_eau')),
-    prix_eur        numeric(12,2) not null check (prix_eur >= 0),
-    date_effet      date not null,
-    cree_le         timestamptz not null default now(),
-    cree_par        uuid default auth.uid(),
-    unique (type_prestation, date_effet)
-);
-
-comment on table public.ref_tarif_apragaz is
-    'Référentiel tarifaire Apragaz administrable et daté : RR (répreuve rétinienne) / hydraulique huile / hydraulique eau. Huile et eau distincts à dessein (écart constaté ~13-15 €, cf. commentaire du fichier). Append-only.';
-
-create index if not exists ix_ref_tarif_apragaz_lookup
-    on public.ref_tarif_apragaz (type_prestation, date_effet desc);
-
--- Valeurs initiales — reprises verbatim de public.ref_tarif_requalification
--- (id 1-12), une ligne par (prestation, année), date_effet = 1er janvier de
--- l'année du tarif.
-insert into public.ref_tarif_apragaz (type_prestation, prix_eur, date_effet) values
-    ('rr',                 19.90, date '2023-01-01'),
-    ('hydraulique_eau',    45.92, date '2023-01-01'),
-    ('hydraulique_huile',  32.61, date '2023-01-01'),
-    ('rr',                 20.50, date '2024-01-01'),
-    ('hydraulique_eau',    47.30, date '2024-01-01'),
-    ('hydraulique_huile',  33.59, date '2024-01-01'),
-    ('rr',                 21.32, date '2025-01-01'),
-    ('hydraulique_eau',    49.19, date '2025-01-01'),
-    ('hydraulique_huile',  34.93, date '2025-01-01'),
-    ('rr',                 21.32, date '2026-01-01'),
-    ('hydraulique_eau',    50.45, date '2026-01-01'),
-    ('hydraulique_huile',  35.82, date '2026-01-01')
-on conflict (type_prestation, date_effet) do nothing;
-
-create or replace function public.bouteille_tarif_apragaz(
-    p_type_prestation text, p_a_la_date date default current_date)
-returns numeric
-language sql
-stable
-set search_path = ''
-as $$
-    select prix_eur
-    from public.ref_tarif_apragaz
-    where type_prestation = p_type_prestation
-      and date_effet <= p_a_la_date
-    order by date_effet desc
-    limit 1
-$$;
-
-comment on function public.bouteille_tarif_apragaz(text, date) is
-    'Tarif Apragaz (EUR) en vigueur à p_a_la_date pour type_prestation (rr / hydraulique_huile / hydraulique_eau).';
 
 -- -----------------------------------------------------------------------------
 --  4bis. Historisation — append-only (même garde que public.item_transition,
@@ -284,21 +230,9 @@ create trigger ref_periodicite_bouteille_no_delete
     before delete on public.ref_periodicite_bouteille
     for each row execute function public.tg_ref_bouteille_append_only();
 
-drop trigger if exists ref_tarif_apragaz_no_update on public.ref_tarif_apragaz;
-create trigger ref_tarif_apragaz_no_update
-    before update on public.ref_tarif_apragaz
-    for each row execute function public.tg_ref_bouteille_append_only();
-
-drop trigger if exists ref_tarif_apragaz_no_delete on public.ref_tarif_apragaz;
-create trigger ref_tarif_apragaz_no_delete
-    before delete on public.ref_tarif_apragaz
-    for each row execute function public.tg_ref_bouteille_append_only();
-
 alter table public.ref_periodicite_bouteille enable row level security;
-alter table public.ref_tarif_apragaz         enable row level security;
 
 drop policy if exists moamat_dev_all on public.ref_periodicite_bouteille;
-drop policy if exists moamat_dev_all on public.ref_tarif_apragaz;
 
 -- Lecture : tout authentifié (referentiel.read, comme ref_statut / lieu_*).
 -- Écriture : INSERT seul (referentiel.create, admin+) — pas d'UPDATE/DELETE :
@@ -311,16 +245,6 @@ create policy ref_periodicite_bouteille_sel on public.ref_periodicite_bouteille
 
 drop policy if exists ref_periodicite_bouteille_ins on public.ref_periodicite_bouteille;
 create policy ref_periodicite_bouteille_ins on public.ref_periodicite_bouteille
-    for insert to authenticated
-    with check (public.has_permission('referentiel.create'));
-
-drop policy if exists ref_tarif_apragaz_sel on public.ref_tarif_apragaz;
-create policy ref_tarif_apragaz_sel on public.ref_tarif_apragaz
-    for select to authenticated
-    using (public.has_permission('referentiel.read'));
-
-drop policy if exists ref_tarif_apragaz_ins on public.ref_tarif_apragaz;
-create policy ref_tarif_apragaz_ins on public.ref_tarif_apragaz
     for insert to authenticated
     with check (public.has_permission('referentiel.create'));
 

@@ -2,7 +2,6 @@ using System.Globalization;
 using Microsoft.Extensions.Logging;
 using MoaMat.Domain.Campaigns;
 using MoaMat.Domain.Common;
-using MoaMat.Domain.Cylinders;
 using MoaMat.Infrastructure.Supabase.Mapping;
 using MoaMat.Infrastructure.Supabase.Records;
 using Supabase.Postgrest;
@@ -33,10 +32,10 @@ internal sealed class SupabaseCampaignRepository : ICampaignRepository
     private const int MaxCampaignResults = 200;
 
     private const string CreateRefusedMessage =
-        "Création de la campagne refusée (droits insuffisants ou sélection invalide).";
+        "Création de la campagne refusée (droits insuffisants, fournisseur inconnu ou sélection invalide).";
 
     private const string UpdateRefusedMessage =
-        "Modification refusée (droits insuffisants ou campagne dans un état incompatible).";
+        "Modification refusée (droits insuffisants, campagne dans un état incompatible ou prestation non utilisable pour ce fournisseur).";
 
     private const string SendRefusedMessage =
         "Envoi refusé (droits insuffisants ou prestation manquante sur une ligne).";
@@ -192,24 +191,6 @@ internal sealed class SupabaseCampaignRepository : ICampaignRepository
             cancellationToken);
 
     /// <inheritdoc />
-    public Task<IReadOnlyList<CylinderPricingRule>> GetPricingRulesAsync(
-        CancellationToken cancellationToken = default) =>
-        _guard.ReadAsync(
-            nameof(GetPricingRulesAsync),
-            ReadFailureMessage,
-            async () =>
-            {
-                var response = await _client.From<CylinderPricingRuleRecord>()
-                    .Order("date_effet", Constants.Ordering.Ascending)
-                    .Get(cancellationToken)
-                    .ConfigureAwait(false);
-
-                return (IReadOnlyList<CylinderPricingRule>)
-                    [.. response.Models.Select(CampaignMapper.ToDomain).OfType<CylinderPricingRule>()];
-            },
-            cancellationToken);
-
-    /// <inheritdoc />
     public Task<OperationResult<long>> CreateCampaignAsync(
         string provider,
         IReadOnlyCollection<long> itemIds,
@@ -234,25 +215,38 @@ internal sealed class SupabaseCampaignRepository : ICampaignRepository
     }
 
     /// <inheritdoc />
-    public Task<OperationResult> SetLineServiceTypeAsync(
-        long lineId,
-        CylinderServiceType serviceType,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(serviceType);
+    public Task<OperationResult> SetCampaignSupplierAsync(
+        long campaignId,
+        long supplierId,
+        CancellationToken cancellationToken = default) =>
+        _guard.WriteAsync(
+            nameof(SetCampaignSupplierAsync),
+            UpdateRefusedMessage,
+            () => _client.Rpc(
+                "definir_fournisseur_campagne",
+                new Dictionary<string, object>(StringComparer.Ordinal)
+                {
+                    ["p_campagne_id"] = campaignId,
+                    ["p_fournisseur_id"] = supplierId,
+                }),
+            cancellationToken);
 
-        return _guard.WriteAsync(
-            nameof(SetLineServiceTypeAsync),
+    /// <inheritdoc />
+    public Task<OperationResult> SetLineServiceAsync(
+        long lineId,
+        long serviceId,
+        CancellationToken cancellationToken = default) =>
+        _guard.WriteAsync(
+            nameof(SetLineServiceAsync),
             UpdateRefusedMessage,
             () => _client.Rpc(
                 "definir_prestation_campagne_ligne",
                 new Dictionary<string, object>(StringComparer.Ordinal)
                 {
                     ["p_ligne_id"] = lineId,
-                    ["p_type_prestation"] = serviceType.Code,
+                    ["p_prestation_id"] = serviceId,
                 }),
             cancellationToken);
-    }
 
     /// <inheritdoc />
     public Task<OperationResult> SendCampaignAsync(

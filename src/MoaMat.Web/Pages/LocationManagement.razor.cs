@@ -28,6 +28,11 @@ public partial class LocationManagement : ComponentBase
     private bool _isBusy;
     private string? _error;
 
+    // Deletion is a two-step action: the first click only arms the row
+    // ("kind:id"), the second one (Confirmer) deletes. A section or room takes
+    // its whole subtree with it, so a stray click must never delete at once.
+    private string? _pendingDelete;
+
     [Inject]
     private ILocationRepository Locations { get; set; } = default!;
 
@@ -103,8 +108,17 @@ public partial class LocationManagement : ComponentBase
         _containers = await ReadAsync(() => Locations.GetContainersAsync(roomId), _containers);
     }
 
+    private static string PendingKey(string kind, long id) => $"{kind}:{id}";
+
+    private bool IsPending(string kind, long id) => _pendingDelete == PendingKey(kind, id);
+
+    private void RequestDelete(string kind, long id) => _pendingDelete = PendingKey(kind, id);
+
+    private void CancelDelete() => _pendingDelete = null;
+
     private async Task DeleteSectionAsync(long sectionId)
     {
+        _pendingDelete = null;
         await WriteAsync(() => Locations.DeleteSectionAsync(sectionId));
 
         if (_selectedSectionId == sectionId)
@@ -120,6 +134,7 @@ public partial class LocationManagement : ComponentBase
 
     private async Task DeleteRoomAsync(long roomId)
     {
+        _pendingDelete = null;
         await WriteAsync(() => Locations.DeleteRoomAsync(roomId));
 
         if (_selectedRoomId == roomId)
@@ -136,6 +151,7 @@ public partial class LocationManagement : ComponentBase
 
     private async Task DeleteContainerAsync(long containerId)
     {
+        _pendingDelete = null;
         await WriteAsync(() => Locations.DeleteContainerAsync(containerId));
 
         if (_selectedRoomId is { } roomId)

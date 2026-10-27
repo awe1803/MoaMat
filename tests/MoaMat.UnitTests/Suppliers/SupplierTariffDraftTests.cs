@@ -1,4 +1,3 @@
-using MoaMat.Domain.Cylinders;
 using MoaMat.Domain.Suppliers;
 
 namespace MoaMat.UnitTests.Suppliers;
@@ -14,10 +13,10 @@ public sealed class SupplierTariffDraftTests
     [Fact]
     public void TryCreate_accepts_a_complete_price_and_rounds_to_the_cent()
     {
-        var result = SupplierTariffDraft.TryCreate(CylinderServiceType.Rr, 21.325m, Date, out var draft);
+        var result = SupplierTariffDraft.TryCreate(5, 21.325m, Date, out var draft);
 
         Assert.True(result.Succeeded);
-        Assert.Equal(CylinderServiceType.Rr, draft.Service);
+        Assert.Equal(5, draft.ServiceId);
         Assert.Equal(21.33m, draft.PriceEur);
         Assert.Equal(Date, draft.EffectiveOn);
     }
@@ -25,7 +24,7 @@ public sealed class SupplierTariffDraftTests
     [Fact]
     public void TryCreate_accepts_a_free_service()
     {
-        Assert.True(SupplierTariffDraft.TryCreate(CylinderServiceType.Rr, 0m, Date, out _).Succeeded);
+        Assert.True(SupplierTariffDraft.TryCreate(5, 0m, Date, out _).Succeeded);
     }
 
     [Fact]
@@ -37,7 +36,7 @@ public sealed class SupplierTariffDraftTests
     [Fact]
     public void TryCreate_refuses_a_missing_price()
     {
-        Assert.False(SupplierTariffDraft.TryCreate(CylinderServiceType.HydraulicOil, null, Date, out _).Succeeded);
+        Assert.False(SupplierTariffDraft.TryCreate(5, null, Date, out _).Succeeded);
     }
 
     [Theory]
@@ -45,7 +44,7 @@ public sealed class SupplierTariffDraftTests
     [InlineData(-50)]
     public void TryCreate_refuses_a_negative_price(double price)
     {
-        var result = SupplierTariffDraft.TryCreate(CylinderServiceType.HydraulicWater, (decimal)price, Date, out var draft);
+        var result = SupplierTariffDraft.TryCreate(5, (decimal)price, Date, out var draft);
 
         Assert.False(result.Succeeded);
         Assert.Equal(default, draft);
@@ -56,12 +55,12 @@ public sealed class SupplierTariffDraftTests
     {
         var tooMuch = SupplierTariffDraft.MaxPriceEur + 1;
 
-        Assert.False(SupplierTariffDraft.TryCreate(CylinderServiceType.Rr, tooMuch, Date, out _).Succeeded);
+        Assert.False(SupplierTariffDraft.TryCreate(5, tooMuch, Date, out _).Succeeded);
     }
 
     [Fact]
     public void TryCreate_refuses_a_missing_effective_date()
     {
-        Assert.False(SupplierTariffDraft.TryCreate(CylinderServiceType.Rr, 10m, null, out _).Succeeded);
+        Assert.False(SupplierTariffDraft.TryCreate(5, 10m, null, out _).Succeeded);
     }
 }

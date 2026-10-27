@@ -1,26 +1,29 @@
 using System.Globalization;
 using Microsoft.AspNetCore.Components;
 using MoaMat.Domain.Common;
-using MoaMat.Domain.Cylinders;
 using MoaMat.Domain.Suppliers;
 
 namespace MoaMat.Web.Pages;
 
 /// <summary>
-/// Suppliers: contact details, the services each one offers and the history of
-/// their prices.
+/// Suppliers: contact details and archiving, the services each one offers (bottle
+/// controls — optical, or hydraulic with an explicit oil/water method — or free
+/// services) and the history of their prices, which are optional.
 /// </summary>
 /// <remarks>
-/// Every value goes through <see cref="SupplierDraft"/> or
-/// <see cref="SupplierTariffDraft"/> before it reaches the repository. Rights are
-/// enforced by the database; the markup only hides the controls a role cannot
-/// use. A price is never edited: a change is a new price with a later effective
-/// date, which keeps the history.
+/// Every value goes through <see cref="SupplierDraft"/>,
+/// <see cref="SupplierServiceRequest"/> or <see cref="SupplierTariffDraft"/>
+/// before it reaches the repository. Rights are enforced by the database; the
+/// markup only hides the controls a role cannot use. A price is never edited: a
+/// change is a new price with a later effective date, which keeps the history.
+/// A hydraulic service always names oil or water — the choice is never defaulted.
 /// </remarks>
 public partial class SupplierManagement : ComponentBase
 {
+    private const string NoControlValue = "";
+
     private IReadOnlyList<Supplier> _suppliers = [];
-    private IReadOnlyList<SupplierTariff> _tariffs = [];
+    private IReadOnlyList<SupplierService> _services = [];
 
     private long? _selectedId;
     private bool _showForm;
@@ -35,12 +38,25 @@ public partial class SupplierManagement : ComponentBase
     private string _contactPerson = string.Empty;
     private string _website = string.Empty;
 
-    private string _tariffService = string.Empty;
+    // Service form (create when _editingServiceId is null).
+    private bool _showServiceForm;
+    private long? _editingServiceId;
+    private string _serviceName = string.Empty;
+    private string _serviceControl = NoControlValue;
+    private string _serviceMethod = string.Empty;
+    private bool _serviceActive = true;
+    private string _serviceComment = string.Empty;
+
+    // Tariff panel of one service.
+    private long? _tariffServiceId;
     private decimal? _tariffPrice;
     private DateOnly? _tariffDate = DateOnly.FromDateTime(DateTime.Today);
 
+    private long? _pendingDeleteServiceId;
+
     private bool _isBusy;
     private string? _error;
+    private string? _notice;
 
     [Inject]
     private ISupplierRepository Suppliers { get; set; } = default!;
@@ -51,22 +67,24 @@ public partial class SupplierManagement : ComponentBase
 
     private IEnumerable<Supplier> Visible => _suppliers.Where(supplier => _showInactive || supplier.IsActive);
 
+    private SupplierService? TariffService => _services.FirstOrDefault(service => service.Id == _tariffServiceId);
+
+    private bool IsHydraulicSelected => _serviceControl == nameof(CylinderControl.Hydraulic);
+
     /// <inheritdoc />
     protected override Task OnInitializedAsync() => ReloadAsync();
 
-    /// <summary>Price in force today for a service of the selected supplier, if any.</summary>
-    private SupplierTariff? CurrentTariff(CylinderServiceType service) =>
-        _tariffs
-            .Where(tariff => tariff.Service == service && tariff.EffectiveOn <= Today)
+    /// <summary>Price in force today for a service, if any.</summary>
+    private static ServicePriceRule? CurrentTariff(SupplierService service) =>
+        service.Tariffs
+            .Where(tariff => tariff.EffectiveOn <= Today)
             .MaxBy(tariff => tariff.EffectiveOn);
 
     /// <summary>The next scheduled price of a service, if one is dated in the future.</summary>
-    private SupplierTariff? UpcomingTariff(CylinderServiceType service) =>
-        _tariffs
-            .Where(tariff => tariff.Service == service && tariff.EffectiveOn > Today)
+    private static ServicePriceRule? UpcomingTariff(SupplierService service) =>
+        service.Tariffs
+            .Where(tariff => tariff.EffectiveOn > Today)
             .MinBy(tariff => tariff.EffectiveOn);
-
-    private bool HasTariffs(CylinderServiceType service) => _tariffs.Any(tariff => tariff.Service == service);
 
     /// <summary>Builds a <c>tel:</c> link keeping only the digits and a leading plus.</summary>
     private static string PhoneHref(string phone) =>
@@ -99,26 +117,33 @@ public partial class SupplierManagement : ComponentBase
         if (Selected is null)
         {
             _selectedId = null;
-            _tariffs = [];
+            _services = [];
         }
     }
 
-    private async Task ReloadTariffsAsync()
+    private async Task ReloadServicesAsync()
     {
         if (_selectedId is not { } id)
         {
-            _tariffs = [];
+            _services = [];
             return;
         }
 
         try
         {
-            _tariffs = await Suppliers.GetTariffsAsync(id);
+            _services = await Suppliers.GetServicesAsync(id);
         }
         catch (DataAccessException exception)
         {
             _error = exception.Message;
         }
+    }
+
+    private void CloseSubForms()
+    {
+        _showServiceForm = false;
+        _tariffServiceId = null;
+        _pendingDeleteServiceId = null;
     }
 
     private async Task SelectAsync(long supplierId)
@@ -127,20 +152,24 @@ public partial class SupplierManagement : ComponentBase
         _showForm = false;
         _confirmDelete = false;
         _error = null;
-        _tariffs = [];
-        _tariffService = string.Empty;
-        _tariffPrice = null;
-        await ReloadTariffsAsync();
+        _notice = null;
+        _services = [];
+        CloseSubForms();
+        await ReloadServicesAsync();
     }
+
+    // ----- Supplier -----------------------------------------------------------
 
     private void StartNew()
     {
         _selectedId = null;
-        _tariffs = [];
+        _services = [];
         _isNew = true;
         _showForm = true;
         _confirmDelete = false;
         _error = null;
+        _notice = null;
+        CloseSubForms();
         FillForm(null);
     }
 
@@ -154,6 +183,7 @@ public partial class SupplierManagement : ComponentBase
         _isNew = false;
         _showForm = true;
         _error = null;
+        _notice = null;
         FillForm(supplier);
     }
 
@@ -236,52 +266,140 @@ public partial class SupplierManagement : ComponentBase
         if (await WriteAsync(() => Suppliers.DeleteSupplierAsync(supplier.Id)))
         {
             _selectedId = null;
-            _tariffs = [];
+            _services = [];
             await ReloadAsync();
         }
     }
 
-    private async Task ToggleServiceAsync(CylinderServiceType service, bool offered)
+    // ----- Services -------------------------------------------------------------
+
+    private void StartNewService()
+    {
+        CloseSubForms();
+        _error = null;
+        _notice = null;
+        _editingServiceId = null;
+        _serviceName = string.Empty;
+        _serviceControl = NoControlValue;
+        _serviceMethod = string.Empty;
+        _serviceActive = true;
+        _serviceComment = string.Empty;
+        _showServiceForm = true;
+    }
+
+    private void StartEditService(SupplierService service)
+    {
+        CloseSubForms();
+        _error = null;
+        _notice = null;
+        _editingServiceId = service.Id;
+        _serviceName = service.Name;
+        _serviceControl = service.Control?.ToString() ?? NoControlValue;
+        _serviceMethod = service.Method?.ToString() ?? string.Empty;
+        _serviceActive = service.IsActive;
+        _serviceComment = service.Comment ?? string.Empty;
+        _showServiceForm = true;
+    }
+
+    private async Task SaveServiceAsync()
     {
         if (Selected is not { } supplier)
         {
             return;
         }
 
-        var succeeded = await WriteAsync(() => offered
-            ? Suppliers.AddServiceAsync(supplier.Id, service)
-            : Suppliers.RemoveServiceAsync(supplier.Id, service));
+        var control = Enum.TryParse<CylinderControl>(_serviceControl, out var parsedControl) ? parsedControl : (CylinderControl?)null;
+        var method = Enum.TryParse<HydraulicMethod>(_serviceMethod, out var parsedMethod) ? parsedMethod : (HydraulicMethod?)null;
 
-        // Always reload: on a refusal the checkbox must snap back to the stored state.
-        await ReloadAsync();
-        if (succeeded && !offered && _tariffService == service.Code)
+        var request = SupplierServiceRequest.Create(
+            _editingServiceId,
+            supplier.Id,
+            _serviceName,
+            control,
+            method,
+            _serviceActive,
+            _serviceComment);
+
+        if (!request.Succeeded)
         {
-            _tariffService = string.Empty;
+            _error = request.Error;
+            return;
         }
+
+        if (await WriteValueAsync(() => Suppliers.SaveServiceAsync(request.Value!)))
+        {
+            _showServiceForm = false;
+            _notice = "Prestation enregistrée.";
+            await ReloadServicesAsync();
+        }
+    }
+
+    private async Task ToggleServiceActiveAsync(SupplierService service)
+    {
+        var request = SupplierServiceRequest.Create(
+            service.Id,
+            service.SupplierId,
+            service.Name,
+            service.Control,
+            service.Method,
+            !service.IsActive,
+            service.Comment);
+
+        if (!request.Succeeded)
+        {
+            _error = request.Error;
+            return;
+        }
+
+        if (await WriteValueAsync(() => Suppliers.SaveServiceAsync(request.Value!)))
+        {
+            _notice = service.IsActive ? "Prestation désactivée." : "Prestation réactivée.";
+            await ReloadServicesAsync();
+        }
+    }
+
+    private void RequestDeleteService(SupplierService service) => _pendingDeleteServiceId = service.Id;
+
+    private void CancelDeleteService() => _pendingDeleteServiceId = null;
+
+    private async Task DeleteServiceAsync(SupplierService service)
+    {
+        var succeeded = await WriteAsync(() => Suppliers.DeleteServiceAsync(service.Id));
+        _pendingDeleteServiceId = null;
+
+        if (succeeded)
+        {
+            _notice = "Prestation supprimée.";
+            await ReloadServicesAsync();
+        }
+    }
+
+    // ----- Tariffs --------------------------------------------------------------
+
+    private void StartTariff(SupplierService service)
+    {
+        CloseSubForms();
+        _error = null;
+        _notice = null;
+        _tariffServiceId = service.Id;
+        _tariffPrice = null;
+        _tariffDate = Today;
     }
 
     private async Task AddTariffAsync()
     {
-        if (Selected is not { } supplier)
-        {
-            return;
-        }
-
-        var validation = SupplierTariffDraft.TryCreate(
-            CylinderServiceType.FromCode(_tariffService),
-            _tariffPrice,
-            _tariffDate,
-            out var draft);
+        var validation = SupplierTariffDraft.TryCreate(_tariffServiceId, _tariffPrice, _tariffDate, out var draft);
         if (!validation.Succeeded)
         {
             _error = validation.Error;
             return;
         }
 
-        if (await WriteAsync(() => Suppliers.AddTariffAsync(supplier.Id, draft)))
+        if (await WriteAsync(() => Suppliers.AddTariffAsync(draft)))
         {
             _tariffPrice = null;
-            await ReloadTariffsAsync();
+            _notice = "Prix ajouté (l'historique des prix n'est jamais modifié).";
+            await ReloadServicesAsync();
         }
     }
 
@@ -289,11 +407,35 @@ public partial class SupplierManagement : ComponentBase
     {
         if (await WriteAsync(() => Suppliers.DeleteTariffAsync(tariffId)))
         {
-            await ReloadTariffsAsync();
+            await ReloadServicesAsync();
         }
     }
 
+    // ----- Plumbing ---------------------------------------------------------------
+
     private async Task<bool> WriteAsync(Func<Task<OperationResult>> write)
+    {
+        _isBusy = true;
+        _error = null;
+        StateHasChanged();
+
+        try
+        {
+            var result = await write();
+            if (!result.Succeeded)
+            {
+                _error = result.Error;
+            }
+
+            return result.Succeeded;
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+
+    private async Task<bool> WriteValueAsync<TValue>(Func<Task<OperationResult<TValue>>> write)
     {
         _isBusy = true;
         _error = null;

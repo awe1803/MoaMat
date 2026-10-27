@@ -51,6 +51,7 @@ public sealed class CampaignTests
         {
             Id = 1,
             Provider = "Apragaz",
+            SupplierId = 1,
             Status = CampaignStatus.Returned,
             Lines =
             [
@@ -70,6 +71,7 @@ public sealed class CampaignTests
         {
             Id = 1,
             Provider = "Apragaz",
+            SupplierId = 1,
             Status = CampaignStatus.Sent,
             Lines = [Line(1, returnedOn: null)],
         };
@@ -87,6 +89,7 @@ public sealed class CampaignTests
         {
             Id = 1,
             Provider = "Apragaz",
+            SupplierId = 1,
             Status = CampaignStatus.Returned,
             Lines =
             [
@@ -106,6 +109,7 @@ public sealed class CampaignTests
         {
             Id = 1,
             Provider = "Apragaz",
+            SupplierId = 1,
             Status = CampaignStatus.Returned,
             Lines =
             [

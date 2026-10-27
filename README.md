@@ -66,6 +66,10 @@ db/preferences.sql      Préférences d'affichage par compte (invitation à inst
 db/item_bouteille.sql   Moteur métier Bouteilles : référentiels réglementaire/
                         tarifaire datés, échéances à deux compteurs, bascule
                         automatique « hors validité »
+db/fournisseur.sql      Fournisseurs : coordonnées, archivage (ref_fournisseur)
+db/fournisseur_prestation.sql Catalogue de prestations par fournisseur (huile/eau
+                        distincts, tarif facultatif daté) — AVANT campagne.sql
+db/migration_prestations_fournisseur.sql Migration unique d'une base existante
 db/campagne.sql         Campagnes de réépreuve : préparation, bordereau,
                         retour groupé, bouteilles manquantes/condamnées
 db/bouteille_evenement.sql Chronologie bouteille : reprise des 412 réépreuves (ID interne),
@@ -370,12 +374,14 @@ Dans l'éditeur SQL Supabase (ou via `psql`), exécuter **dans l'ordre** :
     (`materiel-photos`, `certificats-requalification`, `factures`, tous privés)
     et policies d'accès par rôle sur `storage.objects`. Ré-exécutable.
 13. [`db/item_bouteille.sql`](db/item_bouteille.sql) — moteur métier
-    Bouteilles : référentiels réglementaire/tarifaire datés (append-only),
+    Bouteilles : référentiel réglementaire daté (append-only),
     échéances à deux compteurs (optique/hydraulique), bascule automatique
     « hors validité ». Détail : [`db/MODELE.md`](db/MODELE.md) §10.
 14. [`db/campagne.sql`](db/campagne.sql) — campagnes de réépreuve
     (préparation → envoi → retour), écritures exclusivement via RPC
-    `SECURITY DEFINER`. Détail : [`db/MODELE.md`](db/MODELE.md) §11.
+    `SECURITY DEFINER`. **Exécuter après `db/fournisseur.sql` et
+    `db/fournisseur_prestation.sql`** (nº 19-20 ci-dessous). Détail :
+    [`db/MODELE.md`](db/MODELE.md) §11.
 15. [`db/bouteille_evenement.sql`](db/bouteille_evenement.sql) — chronologie
     bouteille : reprise des 412 réépreuves (ID interne), requalification et
     signalement d'incident saisis depuis la fiche bouteille.
@@ -392,14 +398,24 @@ Dans l'éditeur SQL Supabase (ou via `psql`), exécuter **dans l'ordre** :
     ligne, écriture via `public.definir_invite_installation_masquee`). Porte
     aujourd'hui le « ne plus afficher » de l'invitation à installer la PWA.
 19. [`db/fournisseur.sql`](db/fournisseur.sql) — fournisseurs / prestataires :
-    coordonnées (`ref_fournisseur`), prestations proposées
-    (`ref_fournisseur_prestation`) et historique daté des prix
-    (`ref_fournisseur_tarif`, un changement de prix = une nouvelle ligne),
-    reprise unique des tarifs Apragaz depuis `ref_tarif_apragaz`. Écran
-    `/fournisseurs`. Les prix du fournisseur Apragaz sont la SEULE source du
-    chiffrage des campagnes (`public.campagne_tarif_prestation()`, vue
-    `public.v_tarif_campagne`, sans repli sur l'ancien référentiel) : à
-    exécuter avant d'utiliser les campagnes.
+    coordonnées et archivage (`ref_fournisseur`, nom unique, contact,
+    téléphone, email, site web, adresse). Écran `/fournisseurs`. **À exécuter
+    avant `db/campagne.sql`.**
+20. [`db/fournisseur_prestation.sql`](db/fournisseur_prestation.sql) —
+    catalogue de **prestations par fournisseur** : contrôle de bouteille
+    (optique, ou hydraulique **huile / eau** — méthode obligatoire, jamais par
+    défaut) ou prestation libre ; tarif facultatif, daté, append-only
+    (un changement de prix = une nouvelle ligne ; suppression d'un prix saisi
+    par erreur réservée à admin). Remplace l'ancien catalogue à 3 prestations
+    figées (`ref_fournisseur_prestation` / `ref_fournisseur_tarif`) et
+    `ref_tarif_apragaz`, dont les données sont reprises. **À exécuter après
+    `db/fournisseur.sql` et avant `db/campagne.sql`.**
+21. [`db/migration_prestations_fournisseur.sql`](db/migration_prestations_fournisseur.sql)
+    — **base existante uniquement** : remappe les campagnes de l'ancien modèle
+    (`type_prestation` → prestation du fournisseur, huile/eau jamais fusionnées),
+    garde-fous bloquants, tout ou rien, puis supprime l'ancien modèle.
+    **Dump préalable.** Ordre : 19, 20, 21, puis (ré-)exécuter `db/campagne.sql`.
+    Détail : [`db/MODELE.md`](db/MODELE.md) §11bis.
 
 Tous ces scripts sont ré-exécutables. Ensuite : activer le hook
 *Custom Access Token* (Dashboard → Authentication → Hooks →
@@ -417,7 +433,7 @@ psql "$SUPABASE_DB_URL" -f db/tests/campagne_tests.sql
 psql "$SUPABASE_DB_URL" -f db/tests/bouteille_evenement_tests.sql
 psql "$SUPABASE_DB_URL" -f db/tests/detendeur_evenement_tests.sql
 psql "$SUPABASE_DB_URL" -f db/tests/preferences_tests.sql
-psql "$SUPABASE_DB_URL" -f db/tests/fournisseur_tests.sql
+psql "$SUPABASE_DB_URL" -f db/tests/fournisseur_prestation_tests.sql
 ```
 
 Modèle de sécurité complet : [`db/SECURITE.md`](db/SECURITE.md).
